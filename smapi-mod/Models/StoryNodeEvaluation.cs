@@ -12,6 +12,16 @@ public sealed class StoryNodeEvaluation
 
     public string Location { get; init; } = string.Empty;
 
+    public string RawKey { get; init; } = string.Empty;
+
+    public List<string> RawPreconditions { get; init; } = new();
+
+    public List<string> UnknownFragments { get; init; } = new();
+
+    public string RawScriptPreview { get; init; } = string.Empty;
+
+    public List<PatchWhenCondition> PatchWhenConditions { get; init; } = new();
+
     public StoryNodeStatus Status { get; init; } = StoryNodeStatus.Unknown;
 
     public string StatusReason { get; init; } = string.Empty;

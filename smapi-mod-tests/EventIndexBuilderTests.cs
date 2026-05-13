@@ -10,6 +10,27 @@ internal static class EventIndexBuilderTests
     {
         Build_ExtractsTwoNodes_FromMockContentJson();
         Build_ExtractsNodes_FromIncludedChanges();
+        Build_CapturesPatchWhenConditions();
+        Build_SkipsBranchOnlyEventEntries();
+        Build_DeduplicatesOverriddenEventKeysWithinLocation();
+        Build_SkipsAnswerIdAfterForkEventIdAnswerId();
+    }
+
+    private static void Build_SkipsAnswerIdAfterForkEventIdAnswerId()
+    {
+        var scannedMod = CreateScannedMod(
+            "Fork TwoArg Pack",
+            "Tests.ForkTwoArgPack",
+            "{ \"Changes\": [ { \"Action\": \"EditData\", \"Target\": \"Data/Events/FarmHouse\", \"Entries\": { " +
+            "\"626070601/t 2000 2600\": \"continue/fork 626070612 rainynight_leave/pause 500/fork 626070621 rainynight_explain/end\", " +
+            "\"rainynight_leave\": \"pause 500/end\", " +
+            "\"rainynight_explain\": \"pause 500/end\" } } ] }"
+        );
+
+        var result = new EventIndexBuilder().Build(new[] { scannedMod });
+
+        AssertEqual(1, result.NodeCount, "Two-arg fork answer-ids must be treated as branch-only and skipped.");
+        AssertEqual("626070601", result.Nodes.Single().EventId, "Only the parent event should remain indexed.");
     }
 
     private static void Build_ExtractsTwoNodes_FromMockContentJson()
@@ -133,12 +154,88 @@ internal static class EventIndexBuilderTests
         );
     }
 
+    private static void Build_CapturesPatchWhenConditions()
+    {
+        var scannedMod = CreateScannedMod(
+            "When Pack",
+            "Tests.WhenPack",
+            "{ \"Changes\": [ { \"Action\": \"EditData\", \"Target\": \"Data/Events/Farm\", \"When\": { \"Relationship:Alex\": \"Engaged\" }, \"Entries\": { \"100/t 600 2400\": \"event script\" } } ] }"
+        );
+
+        var result = new EventIndexBuilder().Build(new[] { scannedMod });
+        var node = result.Nodes.Single();
+
+        AssertEqual(1, node.PatchWhenConditions.Count, "Patch When condition should be captured.");
+        AssertEqual("Relationship:Alex", node.PatchWhenConditions[0].Key, "Patch When key mismatch.");
+        AssertEqual("Engaged", node.PatchWhenConditions[0].Value, "Patch When value mismatch.");
+        AssertTrue(!node.PatchWhenConditions[0].IsKnown, "Patch When should be marked unknown until evaluated.");
+    }
+
+    private static void Build_SkipsBranchOnlyEventEntries()
+    {
+        var scannedMod = CreateScannedMod(
+            "Branch Pack",
+            "Tests.BranchPack",
+            "{ \"Changes\": [ { \"Action\": \"EditData\", \"Target\": \"Data/Events/Farm\", \"Entries\": { \"100/t 600 2400\": \"question fork0 \\\"Go?#Yes#No\\\"/fork dateYes/end\", \"dateYes\": \"pause 200/end\" } } ] }"
+        );
+
+        var result = new EventIndexBuilder().Build(new[] { scannedMod });
+
+        AssertEqual(1, result.NodeCount, "Branch-only fork target should not be indexed as a normal event.");
+        AssertEqual("100", result.Nodes.Single().EventId, "Only the entry event should remain.");
+    }
+
+    private static void Build_DeduplicatesOverriddenEventKeysWithinLocation()
+    {
+        var scannedMod = CreateScannedMod(
+            "Override Pack",
+            "Tests.OverridePack",
+            "{ \"Changes\": [ { \"Action\": \"EditData\", \"Target\": \"Data/Events/Farm\", \"Entries\": { \"908070/t 600 900\": \"old script\" } }, { \"Action\": \"EditData\", \"Target\": \"Data/Events/Farm\", \"Entries\": { \"908070/t 600 900\": \"new script\" } } ] }"
+        );
+
+        var result = new EventIndexBuilder().Build(new[] { scannedMod });
+        var node = result.Nodes.Single();
+
+        AssertEqual(1, result.NodeCount, "Duplicate location/raw-key entries should collapse to one node.");
+        AssertTrue(node.RawScriptPreview.Contains("new script", StringComparison.Ordinal), "The later patch entry should win.");
+    }
+
     private static void AssertEqual<T>(T expected, T actual, string message)
     {
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
         {
             throw new InvalidOperationException($"{message} Expected: {expected}; Actual: {actual}");
         }
+    }
+
+    private static ScannedMod CreateScannedMod(string name, string uniqueId, string contentJson)
+    {
+        var testDirectory = Path.Combine(
+            Path.GetTempPath(),
+            "StardewStoryInspector.Tests",
+            nameof(EventIndexBuilderTests),
+            Guid.NewGuid().ToString("N")
+        );
+        Directory.CreateDirectory(testDirectory);
+        var contentJsonPath = Path.Combine(testDirectory, "content.json");
+        File.WriteAllText(contentJsonPath, contentJson);
+
+        return new ScannedMod
+        {
+            DirectoryPath = testDirectory,
+            ManifestPath = Path.Combine(testDirectory, "manifest.json"),
+            Name = name,
+            UniqueID = uniqueId,
+            Author = "Tests",
+            Version = "1.0.0",
+            ContentPackFor = new ContentPackReference
+            {
+                UniqueID = "Pathoschild.ContentPatcher"
+            },
+            IsContentPatcherContentPack = true,
+            ContentJsonPath = contentJsonPath,
+            ContentJson = JsonNode.Parse(contentJson)
+        };
     }
 
     private static void AssertTrue(bool condition, string message)

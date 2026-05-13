@@ -14,7 +14,10 @@ try
 {
     LooseJsonParserTests.RunAll();
     RuntimeStoryStateRefreshServiceTests.RunAll();
+    RuntimeStoryStateRefreshServiceHistoryTests.RunAll();
     StoryStateEvaluationExporterTests.RunAll();
+    EventHistoryStoreTests.RunAll();
+    EventHistoryTrackerTests.RunAll();
     StoryStateEvaluatorTests.RunAll();
     StoryNodeStatusClassifierTests.RunAll();
     ConditionEvaluatorTests.RunAll();

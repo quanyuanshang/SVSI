@@ -55,6 +55,14 @@ export interface ConditionAtomResult {
   reason?: string;
 }
 
+export interface PatchWhenCondition {
+  key?: string;
+  value?: string;
+  rawValue?: string;
+  isKnown?: boolean;
+  reason?: string;
+}
+
 export interface ConditionEvaluationResult {
   passed?: boolean | null;
   hasUnknown?: boolean;
@@ -68,6 +76,11 @@ export interface StoryNodeEvaluation {
   sourceModId?: string;
   sourceModName?: string;
   location?: string;
+  rawKey?: string;
+  rawPreconditions?: string[];
+  unknownFragments?: string[];
+  rawScriptPreview?: string;
+  patchWhenConditions?: PatchWhenCondition[];
   status?: StoryNodeStatus;
   statusReason?: string;
   conditionResult?: ConditionEvaluationResult;

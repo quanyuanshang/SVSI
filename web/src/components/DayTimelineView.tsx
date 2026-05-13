@@ -86,6 +86,14 @@ export function DayTimelineView({
                         <span>{node.location ?? "Unknown location"}</span>
                       </div>
                       <p className="timeline-item__reason">{shortReason}</p>
+                      <div className="condition-summary" aria-label="Trigger condition details">
+                        <span>Raw key: {node.rawKey ?? node.eventId ?? "Unknown"}</span>
+                        <span>{countPassedAtoms(node)} passed</span>
+                        <span>{countUnknownConditions(node)} unknown</span>
+                        {node.patchWhenConditions?.length ? (
+                          <span>CP When: {node.patchWhenConditions.length}</span>
+                        ) : null}
+                      </div>
                     </button>
                   );
                 })}
@@ -95,6 +103,23 @@ export function DayTimelineView({
         ))}
       </div>
     </section>
+  );
+}
+
+function countPassedAtoms(node: StoryNodeEvaluation): number {
+  return (node.conditionResult?.atomResults ?? []).filter(
+    (atom) => atom.passed === true,
+  ).length;
+}
+
+function countUnknownConditions(node: StoryNodeEvaluation): number {
+  const unknownAtoms = (node.conditionResult?.atomResults ?? []).filter(
+    (atom) => atom.passed == null,
+  ).length;
+  return (
+    unknownAtoms +
+    (node.unknownFragments?.length ?? 0) +
+    (node.patchWhenConditions?.filter((condition) => !condition.isKnown).length ?? 0)
   );
 }
 

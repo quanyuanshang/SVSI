@@ -20,6 +20,29 @@ public sealed class StoryNodeStatusClassifier
             );
         }
 
+        if (!IsLocationTriggerableEventId(node.EventId) && node.RawPreconditions.Count == 0)
+        {
+            return this.CreateEvaluation(
+                node,
+                conditionResult,
+                StoryNodeStatus.Unknown,
+                $"Event id '{node.EventId}' is non-numeric and has no preconditions; it is likely a fork/branch target or a game-triggered special event (e.g., PlayerKilled) rather than a regular location-entry event."
+            );
+        }
+
+        var unknownPatchWhenConditions = node.PatchWhenConditions
+            .Where(condition => !condition.IsKnown)
+            .ToList();
+        if (unknownPatchWhenConditions.Count > 0)
+        {
+            return this.CreateEvaluation(
+                node,
+                conditionResult,
+                StoryNodeStatus.Unknown,
+                $"Patch-level When conditions are not evaluated: {string.Join("; ", unknownPatchWhenConditions.Select(FormatPatchWhenCondition))}. Cannot safely determine status."
+            );
+        }
+
         var progressionFailures = conditionResult.AtomResults
             .Where(atom => atom.Passed == false && atom.IsProgressionSensitive)
             .ToList();
@@ -112,6 +135,11 @@ public sealed class StoryNodeStatusClassifier
             SourceModId = node.SourceModId,
             SourceModName = node.SourceModName,
             Location = node.Location,
+            RawKey = node.RawKey,
+            RawPreconditions = node.RawPreconditions,
+            UnknownFragments = node.UnknownFragments,
+            RawScriptPreview = node.RawScriptPreview,
+            PatchWhenConditions = node.PatchWhenConditions,
             Status = status,
             StatusReason = statusReason,
             ConditionResult = conditionResult,
@@ -119,5 +147,30 @@ public sealed class StoryNodeStatusClassifier
             RelatedDialogueRefs = node.RelatedDialogueRefs,
             RelatedEventChoiceRefs = node.RelatedEventChoiceRefs
         };
+    }
+
+    private static string FormatPatchWhenCondition(PatchWhenCondition condition)
+    {
+        return string.IsNullOrWhiteSpace(condition.Value)
+            ? condition.Key
+            : $"{condition.Key}={condition.Value}";
+    }
+
+    private static bool IsLocationTriggerableEventId(string eventId)
+    {
+        if (string.IsNullOrEmpty(eventId))
+        {
+            return false;
+        }
+
+        foreach (var character in eventId)
+        {
+            if (!char.IsDigit(character))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

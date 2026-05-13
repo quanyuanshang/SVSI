@@ -32,17 +32,22 @@
     <Compile Include="..\smapi-mod\Models\ContentPackReference.cs" Link="Linked\Models\ContentPackReference.cs" />
     <Compile Include="..\smapi-mod\Models\DialogueIndex.cs" Link="Linked\Models\DialogueIndex.cs" />
     <Compile Include="..\smapi-mod\Models\DialogueIndexEntry.cs" Link="Linked\Models\DialogueIndexEntry.cs" />
+    <Compile Include="..\smapi-mod\Models\EventHistoryReport.cs" Link="Linked\Models\EventHistoryReport.cs" />
     <Compile Include="..\smapi-mod\Models\EventScriptChoiceIndex.cs" Link="Linked\Models\EventScriptChoiceIndex.cs" />
     <Compile Include="..\smapi-mod\Models\EventScriptChoiceEntry.cs" Link="Linked\Models\EventScriptChoiceEntry.cs" />
     <Compile Include="..\smapi-mod\Models\EventKeySplitResult.cs" Link="Linked\Models\EventKeySplitResult.cs" />
     <Compile Include="..\smapi-mod\Models\EventPreconditionParseResult.cs" Link="Linked\Models\EventPreconditionParseResult.cs" />
     <Compile Include="..\smapi-mod\Models\EvidenceRef.cs" Link="Linked\Models\EvidenceRef.cs" />
     <Compile Include="..\smapi-mod\Models\ExportState.cs" Link="Linked\Models\ExportState.cs" />
+    <Compile Include="..\smapi-mod\Models\GameDateSnapshot.cs" Link="Linked\Models\GameDateSnapshot.cs" />
     <Compile Include="..\smapi-mod\Models\ModScanReport.cs" Link="Linked\Models\ModScanReport.cs" />
+    <Compile Include="..\smapi-mod\Models\ObservedEventHistoryEntry.cs" Link="Linked\Models\ObservedEventHistoryEntry.cs" />
+    <Compile Include="..\smapi-mod\Models\PatchWhenCondition.cs" Link="Linked\Models\PatchWhenCondition.cs" />
     <Compile Include="..\smapi-mod\Models\RelatedDialogueRef.cs" Link="Linked\Models\RelatedDialogueRef.cs" />
     <Compile Include="..\smapi-mod\Models\RelatedEventChoiceRef.cs" Link="Linked\Models\RelatedEventChoiceRef.cs" />
     <Compile Include="..\smapi-mod\Models\RuntimeGameState.cs" Link="Linked\Models\RuntimeGameState.cs" />
     <Compile Include="..\smapi-mod\Models\RuntimeStateExport.cs" Link="Linked\Models\RuntimeStateExport.cs" />
+    <Compile Include="..\smapi-mod\Models\SaveIdentity.cs" Link="Linked\Models\SaveIdentity.cs" />
     <Compile Include="..\smapi-mod\Models\ScannedMod.cs" Link="Linked\Models\ScannedMod.cs" />
     <Compile Include="..\smapi-mod\Models\StoryNode.cs" Link="Linked\Models\StoryNode.cs" />
     <Compile Include="..\smapi-mod\Models\StoryNodeEvaluation.cs" Link="Linked\Models\StoryNodeEvaluation.cs" />
@@ -51,6 +56,8 @@
     <Compile Include="..\smapi-mod\Models\StoryRawEventIndex.cs" Link="Linked\Models\StoryRawEventIndex.cs" />
     <Compile Include="..\smapi-mod\Services\DialogueIndexParser.cs" Link="Linked\Services\DialogueIndexParser.cs" />
     <Compile Include="..\smapi-mod\Services\ConditionEvaluator.cs" Link="Linked\Services\ConditionEvaluator.cs" />
+    <Compile Include="..\smapi-mod\Services\EventHistoryStore.cs" Link="Linked\Services\EventHistoryStore.cs" />
+    <Compile Include="..\smapi-mod\Services\EventHistoryTracker.cs" Link="Linked\Services\EventHistoryTracker.cs" />
     <Compile Include="..\smapi-mod\Services\EventIndexBuilder.cs" Link="Linked\Services\EventIndexBuilder.cs" />
     <Compile Include="..\smapi-mod\Services\EventKeySplitter.cs" Link="Linked\Services\EventKeySplitter.cs" />
     <Compile Include="..\smapi-mod\Services\EventPreconditionParser.cs" Link="Linked\Services\EventPreconditionParser.cs" />

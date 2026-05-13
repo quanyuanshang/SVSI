@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Text.Json.Nodes;
 using Newtonsoft.Json.Linq;
 using StardewStoryInspector.Models;
@@ -10,6 +11,10 @@ public sealed class EventIndexBuilder
 {
     private const string DataEventsPrefix = "Data/Events/";
     private const int PreviewLength = 160;
+    private static readonly Regex BranchReferencePattern = new(
+        @"(?:^|[/\\\s])(?:fork|switchEvent)\s+([A-Za-z0-9_.:-]+)(?:\s+([A-Za-z0-9_.:-]+))?",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase
+    );
     private readonly EventKeySplitter eventKeySplitter = new();
     private readonly EventPreconditionParser eventPreconditionParser = new();
 
@@ -37,8 +42,8 @@ public sealed class EventIndexBuilder
         }
 
         var distinctNodes = nodes
-            .GroupBy(node => node.NodeId, StringComparer.Ordinal)
-            .Select(group => group.First())
+            .GroupBy(node => $"{node.AssetTarget}|{node.RawKey}", StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last())
             .ToList();
 
         return new StoryRawEventIndex
@@ -99,6 +104,8 @@ public sealed class EventIndexBuilder
             yield break;
         }
 
+        var branchTargets = ReadBranchTargets(entries);
+
         foreach (var entry in entries)
         {
             if (entry.Value is null)
@@ -108,12 +115,17 @@ public sealed class EventIndexBuilder
 
             var rawKey = entry.Key;
             var rawScript = this.ReadRawValue(entry.Value);
+            if (IsBranchOnlyEntry(rawKey, branchTargets))
+            {
+                continue;
+            }
 
             yield return this.CreateStoryNode(
                 mod,
                 assetTarget,
                 rawKey,
                 rawScript,
+                ReadPatchWhenConditions(change),
                 new List<EvidenceRef>
                 {
                     new EvidenceRef
@@ -163,18 +175,25 @@ public sealed class EventIndexBuilder
             yield break;
         }
 
+        var branchTargets = ReadBranchTargets(loadedEntries);
+
         foreach (var property in loadedEntries.Properties())
         {
             var rawKey = property.Name;
             var rawScript = property.Value.Type == JTokenType.String
                 ? property.Value.Value<string>() ?? string.Empty
                 : property.Value.ToString(Newtonsoft.Json.Formatting.None);
+            if (IsBranchOnlyEntry(rawKey, branchTargets))
+            {
+                continue;
+            }
 
             yield return this.CreateStoryNode(
                 mod,
                 assetTarget,
                 rawKey,
                 rawScript,
+                ReadPatchWhenConditions(change),
                 new List<EvidenceRef>
                 {
                     new EvidenceRef
@@ -314,6 +333,7 @@ public sealed class EventIndexBuilder
         string assetTarget,
         string rawKey,
         string rawScript,
+        List<PatchWhenCondition> patchWhenConditions,
         List<EvidenceRef> evidenceRefs)
     {
         var location = ExtractLocation(assetTarget);
@@ -331,6 +351,7 @@ public sealed class EventIndexBuilder
             Location = location,
             RawKey = rawKey,
             RawPreconditions = keySplit.PreconditionFragments,
+            PatchWhenConditions = patchWhenConditions,
             ConditionAst = parsedConditions.ConditionAst,
             UnknownFragments = parsedConditions.UnknownFragments,
             RawScriptPreview = BuildPreview(rawScript),
@@ -348,6 +369,105 @@ public sealed class EventIndexBuilder
         return value is JsonValue jsonValue && jsonValue.TryGetValue<string>(out var stringValue)
             ? stringValue
             : value.ToJsonString();
+    }
+
+    private static List<PatchWhenCondition> ReadPatchWhenConditions(JsonObject change)
+    {
+        var conditions = new List<PatchWhenCondition>();
+        if (change["When"] is not JsonObject whenObject)
+        {
+            return conditions;
+        }
+
+        foreach (var condition in whenObject)
+        {
+            conditions.Add(new PatchWhenCondition
+            {
+                Key = condition.Key,
+                Value = ReadConditionValue(condition.Value),
+                RawValue = condition.Value?.ToJsonString() ?? string.Empty,
+                IsKnown = false,
+                Reason = "Patch-level Content Patcher When condition is not evaluated by the runtime story-state evaluator."
+            });
+        }
+
+        return conditions;
+    }
+
+    private static string ReadConditionValue(JsonNode? value)
+    {
+        if (value is null)
+        {
+            return string.Empty;
+        }
+
+        if (value is JsonValue jsonValue && jsonValue.TryGetValue<string>(out var stringValue))
+        {
+            return stringValue;
+        }
+
+        if (value is JsonValue booleanValue && booleanValue.TryGetValue<bool>(out var boolValue))
+        {
+            return boolValue ? "true" : "false";
+        }
+
+        return value.ToJsonString();
+    }
+
+    private static HashSet<string> ReadBranchTargets(JsonObject entries)
+    {
+        var branchTargets = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var entry in entries)
+        {
+            if (entry.Value is null)
+            {
+                continue;
+            }
+
+            var script = entry.Value is JsonValue jsonValue && jsonValue.TryGetValue<string>(out var stringValue)
+                ? stringValue
+                : entry.Value.ToJsonString();
+
+            CollectBranchTargets(script, branchTargets);
+        }
+
+        return branchTargets;
+    }
+
+    private static HashSet<string> ReadBranchTargets(JObject entries)
+    {
+        var branchTargets = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var property in entries.Properties())
+        {
+            var script = property.Value.Type == JTokenType.String
+                ? property.Value.Value<string>() ?? string.Empty
+                : property.Value.ToString(Newtonsoft.Json.Formatting.None);
+
+            CollectBranchTargets(script, branchTargets);
+        }
+
+        return branchTargets;
+    }
+
+    private static void CollectBranchTargets(string script, HashSet<string> branchTargets)
+    {
+        foreach (Match match in BranchReferencePattern.Matches(script))
+        {
+            for (var groupIndex = 1; groupIndex < match.Groups.Count; groupIndex++)
+            {
+                var captured = match.Groups[groupIndex].Value;
+                if (!string.IsNullOrWhiteSpace(captured))
+                {
+                    branchTargets.Add(captured);
+                }
+            }
+        }
+    }
+
+    private static bool IsBranchOnlyEntry(string rawKey, ISet<string> branchTargets)
+    {
+        return !rawKey.Contains('/', StringComparison.Ordinal) &&
+            branchTargets.Contains(rawKey);
     }
 
     private static string ExtractLocation(string assetTarget)

@@ -16,6 +16,60 @@ internal static class StoryNodeDialogueLinkerTests
     {
         Link_CreatesRelation_WhenStoryNodeDependsOnDialogueAnswer();
         Link_CreatesEventChoiceRelation_WhenStoryNodeDependsOnEventScriptAnswer();
+        Link_PreservesPatchWhenConditions();
+    }
+
+    private static void Link_PreservesPatchWhenConditions()
+    {
+        var storyIndex = new StoryRawEventIndex
+        {
+            GeneratedAtUtc = DateTimeOffset.UtcNow,
+            NodeCount = 1,
+            Nodes =
+            {
+                new StoryNode
+                {
+                    NodeId = "story-node:patch-when",
+                    EventId = "908070",
+                    SourceModId = "Tests.MockPatchWhenPack",
+                    SourceModName = "Mock Patch When Pack",
+                    AssetTarget = "Data/Events/Farm",
+                    Location = "Farm",
+                    RawKey = "908070/t 600 900",
+                    RawPreconditions = new List<string> { "t 600 900" },
+                    PatchWhenConditions = new List<PatchWhenCondition>
+                    {
+                        new PatchWhenCondition
+                        {
+                            Key = "Spouse |contains=Wizard",
+                            Value = "false",
+                            RawValue = "false",
+                            IsKnown = false,
+                            Reason = "Patch-level Content Patcher When condition is not evaluated by the runtime story-state evaluator."
+                        },
+                        new PatchWhenCondition
+                        {
+                            Key = "HasFlag",
+                            Value = "galaxySword",
+                            RawValue = "\"galaxySword\"",
+                            IsKnown = false,
+                            Reason = "Patch-level Content Patcher When condition is not evaluated by the runtime story-state evaluator."
+                        }
+                    },
+                    ConditionAst = new ConditionAstNode { Type = "AllOf" },
+                    RawScriptPreview = "preview"
+                }
+            }
+        };
+
+        var linked = new StoryNodeDialogueLinker().Link(storyIndex, new DialogueIndex(), new EventScriptChoiceIndex());
+        var node = linked.Nodes.Single();
+
+        AssertEqual(2, node.PatchWhenConditions.Count, "Linker must preserve patch-level When conditions.");
+        AssertEqual("Spouse |contains=Wizard", node.PatchWhenConditions[0].Key, "First patch When key should survive linking.");
+        AssertEqual("false", node.PatchWhenConditions[0].Value, "First patch When value should survive linking.");
+        AssertEqual("HasFlag", node.PatchWhenConditions[1].Key, "Second patch When key should survive linking.");
+        AssertEqual("galaxySword", node.PatchWhenConditions[1].Value, "Second patch When value should survive linking.");
     }
 
     private static void Link_CreatesRelation_WhenStoryNodeDependsOnDialogueAnswer()

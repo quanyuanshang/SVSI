@@ -112,6 +112,7 @@ public sealed class StoryNodeDialogueLinker
             Location = node.Location,
             RawKey = node.RawKey,
             RawPreconditions = node.RawPreconditions,
+            PatchWhenConditions = node.PatchWhenConditions,
             ConditionAst = node.ConditionAst,
             UnknownFragments = node.UnknownFragments,
             RawScriptPreview = node.RawScriptPreview,

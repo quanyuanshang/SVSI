@@ -7,6 +7,7 @@ public sealed class RuntimeStoryStateRefreshService
     private readonly Func<RuntimeGameState?> collectState;
     private readonly StoryStateEvaluationExporter storyStateEvaluationExporter;
     private readonly StoryStateEvaluator storyStateEvaluator;
+    private readonly EventHistoryTracker eventHistoryTracker;
     private readonly Action<string>? logInfo;
     private readonly Action<string>? logWarning;
     private readonly Action<string>? logDebug;
@@ -22,6 +23,7 @@ public sealed class RuntimeStoryStateRefreshService
             collectState,
             new StoryStateEvaluationExporter(),
             new StoryStateEvaluator(),
+            new EventHistoryTracker(),
             logInfo,
             logWarning,
             logDebug,
@@ -37,10 +39,32 @@ public sealed class RuntimeStoryStateRefreshService
         Action<string>? logWarning = null,
         Action<string>? logDebug = null,
         Action<string>? logError = null)
+        : this(
+            collectState,
+            storyStateEvaluationExporter,
+            storyStateEvaluator,
+            new EventHistoryTracker(),
+            logInfo,
+            logWarning,
+            logDebug,
+            logError)
+    {
+    }
+
+    public RuntimeStoryStateRefreshService(
+        Func<RuntimeGameState?> collectState,
+        StoryStateEvaluationExporter storyStateEvaluationExporter,
+        StoryStateEvaluator storyStateEvaluator,
+        EventHistoryTracker eventHistoryTracker,
+        Action<string>? logInfo = null,
+        Action<string>? logWarning = null,
+        Action<string>? logDebug = null,
+        Action<string>? logError = null)
     {
         this.collectState = collectState;
         this.storyStateEvaluationExporter = storyStateEvaluationExporter;
         this.storyStateEvaluator = storyStateEvaluator;
+        this.eventHistoryTracker = eventHistoryTracker;
         this.logInfo = logInfo;
         this.logWarning = logWarning;
         this.logDebug = logDebug;
@@ -82,6 +106,8 @@ public sealed class RuntimeStoryStateRefreshService
                 System.Text.Json.JsonSerializer.Serialize(ToExportState(runtimeState), JsonExportOptions.Default)
             );
 
+            this.TryWriteEventHistory(evaluatedOutputPath, runtimeState, storyNodes);
+
             this.logInfo?.Invoke(
                 $"Story state refreshed: Current={GetStatusCount(report, StoryNodeStatus.Current)}, " +
                 $"AvailableLater={GetStatusCount(report, StoryNodeStatus.AvailableLater)}, " +
@@ -97,6 +123,43 @@ public sealed class RuntimeStoryStateRefreshService
             this.logError?.Invoke($"Failed to refresh story state: {ex.Message}");
             return null;
         }
+    }
+
+    private void TryWriteEventHistory(
+        string evaluatedOutputPath,
+        RuntimeGameState runtimeState,
+        IReadOnlyCollection<StoryNode> storyNodes)
+    {
+        try
+        {
+            var historyPath = GetEventHistoryPath(evaluatedOutputPath);
+            var report = EventHistoryStore.LoadOrCreate(
+                historyPath,
+                new SaveIdentity
+                {
+                    FarmerName = runtimeState.PlayerName
+                }
+            );
+
+            this.eventHistoryTracker.Track(report, runtimeState, storyNodes);
+            EventHistoryStore.Save(historyPath, report);
+        }
+        catch (Exception ex)
+        {
+            this.logWarning?.Invoke($"Failed to update event history: {ex.Message}");
+        }
+    }
+
+    private static string GetEventHistoryPath(string evaluatedOutputPath)
+    {
+        var stateDirectory = Path.GetDirectoryName(evaluatedOutputPath) ?? string.Empty;
+        var runtimeDirectory = string.Equals(
+            Path.GetFileName(stateDirectory),
+            "state",
+            StringComparison.OrdinalIgnoreCase)
+            ? Directory.GetParent(stateDirectory)?.FullName ?? stateDirectory
+            : stateDirectory;
+        return Path.Combine(runtimeDirectory, "history", "event-history.json");
     }
 
     private static ExportState ToExportState(RuntimeGameState state)

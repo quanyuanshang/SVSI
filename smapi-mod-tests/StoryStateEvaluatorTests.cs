@@ -8,6 +8,32 @@ internal static class StoryStateEvaluatorTests
     public static void RunAll()
     {
         Evaluate_FiveNodes_ProducesExpectedCountsAndOrder();
+        Evaluate_NodeWithUnknownPatchWhen_IsUnknownNotCurrent();
+        Evaluate_NonNumericEventIdWithoutPreconditions_IsUnknownNotCurrent();
+    }
+
+    private static void Evaluate_NonNumericEventIdWithoutPreconditions_IsUnknownNotCurrent()
+    {
+        var evaluator = new StoryStateEvaluator();
+        var state = CreateBaseState();
+        var node = CreateNode(
+            eventId: "PlayerKilled",
+            sourceModId: "Tests.SpecialTrigger",
+            sourceModName: "Special Trigger Pack",
+            location: "Town",
+            conditionAst: new ConditionAstNode { Type = "AllOf" }
+        );
+
+        var report = evaluator.Evaluate(new[] { node }, state);
+        var evaluation = report.Nodes.Single();
+
+        AssertEqual(StoryNodeStatus.Unknown, evaluation.Status, "Non-numeric event id without preconditions must not be classified as Current.");
+        AssertTrue(
+            evaluation.StatusReason.Contains("game-triggered", StringComparison.OrdinalIgnoreCase) ||
+            evaluation.StatusReason.Contains("special", StringComparison.OrdinalIgnoreCase) ||
+            evaluation.StatusReason.Contains("non-numeric", StringComparison.OrdinalIgnoreCase),
+            "Status reason should explain the entry is a special / non-numeric trigger."
+        );
     }
 
     private static void Evaluate_FiveNodes_ProducesExpectedCountsAndOrder()
@@ -46,6 +72,34 @@ internal static class StoryStateEvaluatorTests
 
         AssertEqual("100001", report.Nodes[4].EventId, "Triggered node should sort last.");
         AssertEqual(StoryNodeStatus.Triggered, report.Nodes[4].Status, "Last node should be Triggered.");
+    }
+
+    private static void Evaluate_NodeWithUnknownPatchWhen_IsUnknownNotCurrent()
+    {
+        var evaluator = new StoryStateEvaluator();
+        var state = CreateBaseState();
+        var node = CreateNode(
+            eventId: "300001",
+            sourceModId: "Tests.PatchWhen",
+            sourceModName: "Patch When Pack",
+            location: "Town",
+            conditionAst: CreateAtom("Time", "t 600 2400", "600", "2400")
+        );
+        node.PatchWhenConditions.Add(new PatchWhenCondition
+        {
+            Key = "Relationship:Alex",
+            Value = "Engaged",
+            IsKnown = false,
+            Reason = "Patch-level When condition is not evaluated."
+        });
+
+        var report = evaluator.Evaluate(new[] { node }, state);
+
+        AssertEqual(StoryNodeStatus.Unknown, report.Nodes.Single().Status, "Unknown CP When should prevent Current status.");
+        AssertTrue(
+            report.Nodes.Single().StatusReason.Contains("Relationship:Alex", StringComparison.Ordinal),
+            "Status reason should mention the unknown CP When condition."
+        );
     }
 
     private static StoryNode CreateTriggeredNode()
@@ -194,6 +248,14 @@ internal static class StoryStateEvaluatorTests
         if (!EqualityComparer<T>.Default.Equals(expected, actual))
         {
             throw new InvalidOperationException($"{message} Expected: {expected}; Actual: {actual}");
+        }
+    }
+
+    private static void AssertTrue(bool condition, string message)
+    {
+        if (!condition)
+        {
+            throw new InvalidOperationException(message);
         }
     }
 }

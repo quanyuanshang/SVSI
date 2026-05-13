@@ -1,8 +1,11 @@
 import { formatStatusLabel } from "../lib/format";
+import { formatGameDate } from "../lib/gameDate";
+import type { ObservedEventHistoryEntry } from "../types/history";
 import type { ConditionAtomResult, StoryNodeEvaluation } from "../types/story";
 
 interface StoryNodeDetailProps {
   node: StoryNodeEvaluation | null;
+  historyEntries?: ObservedEventHistoryEntry[];
 }
 
 function renderAtomValue(atom: ConditionAtomResult): string {
@@ -17,7 +20,10 @@ function renderAtomValue(atom: ConditionAtomResult): string {
   return "Unknown";
 }
 
-export function StoryNodeDetail({ node }: StoryNodeDetailProps) {
+export function StoryNodeDetail({
+  node,
+  historyEntries = [],
+}: StoryNodeDetailProps) {
   if (!node) {
     return (
       <section className="panel story-node-detail story-node-detail--empty">
@@ -60,7 +66,81 @@ export function StoryNodeDetail({ node }: StoryNodeDetailProps) {
       </div>
 
       <div className="detail-block">
-        <h3>Condition Atom Results</h3>
+        <h3>Trigger Conditions</h3>
+        <div className="condition-summary condition-summary--stacked">
+          <span>Raw key: {node.rawKey ?? node.eventId ?? "Unknown"}</span>
+          <span>
+            Raw preconditions:{" "}
+            {node.rawPreconditions?.length
+              ? node.rawPreconditions.join(" / ")
+              : "none"}
+          </span>
+          <span>
+            Unknown fragments:{" "}
+            {node.unknownFragments?.length
+              ? node.unknownFragments.join(" / ")
+              : "none"}
+          </span>
+        </div>
+      </div>
+
+      <div className="detail-block">
+        <h3>CP When Conditions</h3>
+        {node.patchWhenConditions?.length ? (
+          <ul className="atom-result-list">
+            {node.patchWhenConditions.map((condition, index) => (
+              <li
+                className="atom-result-card"
+                key={`${condition.key ?? "when"}-${index}`}
+              >
+                <div className="atom-result-card__header">
+                  <strong>{condition.key ?? "Unknown When"}</strong>
+                  <span>{condition.isKnown ? "Known" : "Unknown"}</span>
+                </div>
+                <p className="atom-result-card__raw">
+                  {condition.value ?? condition.rawValue ?? "No value"}
+                </p>
+                <p className="atom-result-card__reason">
+                  {condition.reason ?? "Patch-level condition was not evaluated."}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="empty-state">No patch-level When conditions.</p>
+        )}
+      </div>
+
+      <div className="detail-block">
+        <h3>Local History</h3>
+        {historyEntries.length === 0 ? (
+          <p className="empty-state">No local event history for this node.</p>
+        ) : (
+          <ul className="atom-result-list">
+            {historyEntries.map((entry) => (
+              <li
+                className="atom-result-card"
+                key={`${entry.eventId}-${entry.observedAtUtc ?? ""}`}
+              >
+                <div className="atom-result-card__header">
+                  <strong>{entry.eventId || "Unknown event"}</strong>
+                  <span>{entry.observationSource || "event history"}</span>
+                </div>
+                <p>
+                  First seen:{" "}
+                  {formatGameDate(entry.firstSeenGameDate ?? entry.date)}
+                </p>
+                <p className="atom-result-card__reason">
+                  {entry.location || "Unknown location"}
+                </p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="detail-block">
+        <h3>Known Condition Atom Results</h3>
         {atomResults.length === 0 ? (
           <p className="empty-state">No atom results available.</p>
         ) : (

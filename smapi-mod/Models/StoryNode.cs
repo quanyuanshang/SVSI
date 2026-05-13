@@ -18,6 +18,8 @@ public sealed class StoryNode
 
     public List<string> RawPreconditions { get; init; } = new();
 
+    public List<PatchWhenCondition> PatchWhenConditions { get; init; } = new();
+
     public ConditionAstNode ConditionAst { get; init; } = new()
     {
         Type = "AllOf"

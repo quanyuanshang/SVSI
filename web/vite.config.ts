@@ -24,7 +24,10 @@ function storyStateApiPlugin(): Plugin {
           return;
         }
 
-        if (req.method !== "GET" || req.url !== "/api/story-state") {
+        if (
+          req.method !== "GET" ||
+          (req.url !== "/api/story-state" && req.url !== "/api/event-history")
+        ) {
           next();
           return;
         }
@@ -40,15 +43,29 @@ function storyStateApiPlugin(): Plugin {
           return;
         }
 
-        const storyStatePath = path.resolve(
-          dataDirectory,
-          "runtime",
-          "state",
-          "story-state.evaluated.json",
-        );
+        const dataFile =
+          req.url === "/api/event-history"
+            ? {
+                path: path.resolve(
+                  dataDirectory,
+                  "runtime",
+                  "history",
+                  "event-history.json",
+                ),
+                missingMessage: "event-history.json not found",
+              }
+            : {
+                path: path.resolve(
+                  dataDirectory,
+                  "runtime",
+                  "state",
+                  "story-state.evaluated.json",
+                ),
+                missingMessage: "story-state.evaluated.json not found",
+              };
 
         try {
-          const json = await fs.readFile(storyStatePath, "utf-8");
+          const json = await fs.readFile(dataFile.path, "utf-8");
           res.statusCode = 200;
           res.setHeader("Content-Type", "application/json; charset=utf-8");
           res.setHeader("Cache-Control", "no-store");
@@ -64,8 +81,8 @@ function storyStateApiPlugin(): Plugin {
             res.setHeader("Cache-Control", "no-store");
             res.end(
               JSON.stringify({
-                error: "story-state.evaluated.json not found",
-                path: storyStatePath,
+                error: dataFile.missingMessage,
+                path: dataFile.path,
               }),
             );
             return;

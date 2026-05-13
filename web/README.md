@@ -1,3 +1,14 @@
+# Stardew Story Inspector Web
+
+The Vite dev server exposes local runtime JSON from `STORY_INSPECTOR_DATA_DIR`.
+
+- `GET /api/story-state` reads `runtime/state/story-state.evaluated.json`.
+- `GET /api/event-history` reads `runtime/history/event-history.json`.
+
+The app has two views:
+
+- Today: current day timeline and conflict panel.
+- Progress: recorded event history grouped by year, season, and day.
 # StardewStoryInspector Web
 
 This Vite app can read the live evaluated story report from the local Stardew Valley export directory through the Vite dev server API.
