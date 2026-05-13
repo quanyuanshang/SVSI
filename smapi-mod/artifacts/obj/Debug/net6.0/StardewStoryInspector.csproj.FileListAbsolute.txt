@@ -1,0 +1,13 @@
+D:\cs\dev\StardewStoryInspector\smapi-mod\artifacts\bin\Debug\net6.0\manifest.json
+D:\cs\dev\StardewStoryInspector\smapi-mod\artifacts\bin\Debug\net6.0\StardewStoryInspector.deps.json
+D:\cs\dev\StardewStoryInspector\smapi-mod\artifacts\bin\Debug\net6.0\StardewStoryInspector.dll
+D:\cs\dev\StardewStoryInspector\smapi-mod\artifacts\bin\Debug\net6.0\StardewStoryInspector.pdb
+D:\cs\dev\StardewStoryInspector\smapi-mod\artifacts\obj\Debug\net6.0\StardewStoryInspector.csproj.AssemblyReference.cache
+D:\cs\dev\StardewStoryInspector\smapi-mod\artifacts\obj\Debug\net6.0\StardewStoryInspector.GeneratedMSBuildEditorConfig.editorconfig
+D:\cs\dev\StardewStoryInspector\smapi-mod\artifacts\obj\Debug\net6.0\StardewStoryInspector.AssemblyInfoInputs.cache
+D:\cs\dev\StardewStoryInspector\smapi-mod\artifacts\obj\Debug\net6.0\StardewStoryInspector.AssemblyInfo.cs
+D:\cs\dev\StardewStoryInspector\smapi-mod\artifacts\obj\Debug\net6.0\StardewStoryInspector.csproj.CoreCompileInputs.cache
+D:\cs\dev\StardewStoryInspector\smapi-mod\artifacts\obj\Debug\net6.0\StardewStoryInspector.dll
+D:\cs\dev\StardewStoryInspector\smapi-mod\artifacts\obj\Debug\net6.0\refint\StardewStoryInspector.dll
+D:\cs\dev\StardewStoryInspector\smapi-mod\artifacts\obj\Debug\net6.0\StardewStoryInspector.pdb
+D:\cs\dev\StardewStoryInspector\smapi-mod\artifacts\obj\Debug\net6.0\ref\StardewStoryInspector.dll

@@ -1,0 +1,21 @@
+{
+  "Format": "2.0.0",
+  "Changes": [
+    {
+      "Action": "EditData",
+      "Target": "Data/Events/Town",
+      "Entries": {
+        "100/f Abigail 1000": "speak Abigail \\\"Hi\\\"/pause 500/end"
+      }
+    },
+    {
+      "Action": "Load",
+      "Target": "Data/Events/Beach",
+      "FromFile": "assets/beach-events.json"
+    },
+    {
+      "Action": "EditImage",
+      "Target": "Maps/Town"
+    }
+  ]
+}

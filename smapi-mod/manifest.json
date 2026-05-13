@@ -1,0 +1,10 @@
+{
+  "Name": "StardewStoryInspector",
+  "Author": "Prototype-0",
+  "Version": "0.1.0",
+  "Description": "Minimal SMAPI prototype exporting a mock story state.",
+  "UniqueID": "Prototype0.StardewStoryInspector",
+  "EntryDll": "StardewStoryInspector.dll",
+  "MinimumApiVersion": "4.0.0",
+  "UpdateKeys": []
+}

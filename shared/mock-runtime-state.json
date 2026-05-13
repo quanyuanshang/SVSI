@@ -1,0 +1,26 @@
+{
+  "generatedAtUtc": "2026-05-12T00:00:00Z",
+  "state": {
+    "year": 1,
+    "season": "fall",
+    "dayOfMonth": 12,
+    "dayOfWeek": "Friday",
+    "time": 1900,
+    "weather": "sunny",
+    "currentLocation": "Town",
+    "playerName": "MockFarmer",
+    "friendshipPoints": {
+      "Shane": 2200,
+      "Sam": 1000
+    },
+    "seenEvents": [
+      "100001"
+    ],
+    "mail": [
+      "someMail"
+    ],
+    "dialogueAnswers": [
+      "ShaneAnswerA"
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+smapi-mod/bin/
+smapi-mod/obj/
+smapi-mod-tests/bin/
+smapi-mod-tests/obj/
+smapi-mod-tests/artifacts/bin/
+smapi-mod-tests/artifacts/obj/Debug/
+web/node_modules/
+web/dist/
+StardewStoryInspector/export/

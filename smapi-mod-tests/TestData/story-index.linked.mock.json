@@ -1,0 +1,74 @@
+{
+  "generatedAtUtc": "2026-05-12T00:00:00Z",
+  "nodeCount": 2,
+  "nodes": [
+    {
+      "nodeId": "story-node:100001",
+      "eventId": "100001",
+      "sourceModId": "Tests.MockPack",
+      "sourceModName": "Mock Pack",
+      "assetTarget": "Data/Events/Town",
+      "location": "Town",
+      "rawKey": "100001/f Shane 2000",
+      "rawPreconditions": [
+        "f Shane 2000"
+      ],
+      "conditionAst": {
+        "type": "Atom",
+        "atomType": "Friendship",
+        "raw": "f Shane 2000",
+        "values": [
+          "Shane",
+          "2000"
+        ],
+        "children": [],
+        "operand": null
+      },
+      "unknownFragments": [],
+      "rawScriptPreview": "mock event 1",
+      "evidenceRefs": [
+        {
+          "kind": "test",
+          "sourcePath": "TestData/story-index.linked.mock.json",
+          "jsonPath": "$.nodes[0]"
+        }
+      ],
+      "relatedDialogueRefs": [],
+      "relatedEventChoiceRefs": []
+    },
+    {
+      "nodeId": "story-node:200002",
+      "eventId": "200002",
+      "sourceModId": "Tests.MockPack",
+      "sourceModName": "Mock Pack",
+      "assetTarget": "Data/Events/Beach",
+      "location": "Beach",
+      "rawKey": "200002/f Shane 3000",
+      "rawPreconditions": [
+        "f Shane 3000"
+      ],
+      "conditionAst": {
+        "type": "Atom",
+        "atomType": "Friendship",
+        "raw": "f Shane 3000",
+        "values": [
+          "Shane",
+          "3000"
+        ],
+        "children": [],
+        "operand": null
+      },
+      "unknownFragments": [],
+      "rawScriptPreview": "mock event 2",
+      "evidenceRefs": [
+        {
+          "kind": "test",
+          "sourcePath": "TestData/story-index.linked.mock.json",
+          "jsonPath": "$.nodes[1]"
+        }
+      ],
+      "relatedDialogueRefs": [],
+      "relatedEventChoiceRefs": []
+    }
+  ]
+}

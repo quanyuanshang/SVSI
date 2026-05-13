@@ -1,0 +1,21 @@
+{
+  "Format": "2.0.0",
+  "Changes": [
+    {
+      "Action": "EditData",
+      "Target": "Characters/Dialogue/Shane",
+      "Entries": {
+        "RainyDay_0": "Hello there.",
+        "ResponseTest": "Question?/$r answer_yes 50 Yes#$r answer_no -50 No",
+        "LinkedEventTest": "Remember this one./$v 77771"
+      }
+    },
+    {
+      "Action": "EditData",
+      "Target": "Data/Events/Town",
+      "Entries": {
+        "ShouldBeIgnored": "Nope"
+      }
+    }
+  ]
+}

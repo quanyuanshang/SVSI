@@ -1,0 +1,56 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>StardewStoryInspector</AssemblyName>
+    <RootNamespace>StardewStoryInspector</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <DefaultItemExcludes>$(DefaultItemExcludes);artifacts\**</DefaultItemExcludes>
+    <PlatformTarget>x64</PlatformTarget>
+    <RestoreProjectStyle>None</RestoreProjectStyle>
+    <BaseIntermediateOutputPath>artifacts\obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>artifacts\bin\</BaseOutputPath>
+    <ProjectAssetsFile>$(MSBuildProjectDirectory)\artifacts\obj\project.assets.json</ProjectAssetsFile>
+    <StardewGamePath Condition="'$(StardewGamePath)' == ''">D:\SteamLibrary\steamapps\common\Stardew Valley</StardewGamePath>
+    <SmapiAssemblyPath>$(StardewGamePath)\StardewModdingAPI.dll</SmapiAssemblyPath>
+    <StardewValleyAssemblyPath>$(StardewGamePath)\Stardew Valley.dll</StardewValleyAssemblyPath>
+    <NewtonsoftAssemblyPath>$(StardewGamePath)\smapi-internal\Newtonsoft.Json.dll</NewtonsoftAssemblyPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(NewtonsoftAssemblyPath)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="StardewModdingAPI">
+      <HintPath>$(SmapiAssemblyPath)</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Stardew Valley">
+      <HintPath>$(StardewValleyAssemblyPath)</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="manifest.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <Target Name="ValidateSmapiReference" BeforeTargets="ResolveReferences">
+    <Error
+      Condition="!Exists('$(SmapiAssemblyPath)')"
+      Text="Could not find StardewModdingAPI.dll at '$(SmapiAssemblyPath)'. Set the StardewGamePath MSBuild property to your Stardew Valley install folder."
+    />
+    <Error
+      Condition="!Exists('$(StardewValleyAssemblyPath)')"
+      Text="Could not find Stardew Valley.dll at '$(StardewValleyAssemblyPath)'. Set the StardewGamePath MSBuild property to your Stardew Valley install folder."
+    />
+    <Error
+      Condition="!Exists('$(NewtonsoftAssemblyPath)')"
+      Text="Could not find Newtonsoft.Json.dll at '$(NewtonsoftAssemblyPath)'. Expected it under the SMAPI install's smapi-internal folder."
+    />
+  </Target>
+</Project>

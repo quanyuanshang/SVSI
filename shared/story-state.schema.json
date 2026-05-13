@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://stardewstoryinspector.local/story-state.schema.json",
+  "title": "StoryState",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "year",
+    "season",
+    "day",
+    "time",
+    "weather",
+    "playerName"
+  ],
+  "properties": {
+    "year": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "season": {
+      "type": "string",
+      "enum": [
+        "spring",
+        "summer",
+        "fall",
+        "winter"
+      ]
+    },
+    "day": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 28
+    },
+    "time": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 2600
+    },
+    "weather": {
+      "type": "string"
+    },
+    "playerName": {
+      "type": "string",
+      "minLength": 1
+    }
+  }
+}

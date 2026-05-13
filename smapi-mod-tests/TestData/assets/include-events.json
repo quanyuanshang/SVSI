@@ -1,0 +1,16 @@
+{
+  "Changes": [
+    {
+      "Action": "EditData",
+      "Target": "Data/Events/Mountain",
+      "Entries": {
+        "maggIntro/y 1/Season spring/t 600 2400": "speak Sebastian \\\"Hello from include\\\"/pause 500/end"
+      }
+    },
+    {
+      "Action": "Load",
+      "Target": "Data/Events/Forest",
+      "FromFile": "nested-forest-events.json"
+    }
+  ]
+}

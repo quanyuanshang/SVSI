@@ -1,0 +1,82 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net6.0</TargetFramework>
+    <AssemblyName>StardewStoryInspector.Tests</AssemblyName>
+    <RootNamespace>StardewStoryInspector.Tests</RootNamespace>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <DefaultItemExcludes>$(DefaultItemExcludes);artifacts\**</DefaultItemExcludes>
+    <PlatformTarget>x64</PlatformTarget>
+    <UseAppHost>false</UseAppHost>
+    <RestoreProjectStyle>None</RestoreProjectStyle>
+    <BaseIntermediateOutputPath>artifacts\obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>artifacts\bin\</BaseOutputPath>
+    <ProjectAssetsFile>$(MSBuildProjectDirectory)\artifacts\obj\project.assets.json</ProjectAssetsFile>
+    <StardewGamePath Condition="'$(StardewGamePath)' == ''">D:\SteamLibrary\steamapps\common\Stardew Valley</StardewGamePath>
+    <NewtonsoftAssemblyPath>$(StardewGamePath)\smapi-internal\Newtonsoft.Json.dll</NewtonsoftAssemblyPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(NewtonsoftAssemblyPath)</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="..\smapi-mod\Models\ConditionAstNode.cs" Link="Linked\Models\ConditionAstNode.cs" />
+    <Compile Include="..\smapi-mod\Models\ConditionAtomResult.cs" Link="Linked\Models\ConditionAtomResult.cs" />
+    <Compile Include="..\smapi-mod\Models\ConditionEvaluationResult.cs" Link="Linked\Models\ConditionEvaluationResult.cs" />
+    <Compile Include="..\smapi-mod\Models\ContentPackReference.cs" Link="Linked\Models\ContentPackReference.cs" />
+    <Compile Include="..\smapi-mod\Models\DialogueIndex.cs" Link="Linked\Models\DialogueIndex.cs" />
+    <Compile Include="..\smapi-mod\Models\DialogueIndexEntry.cs" Link="Linked\Models\DialogueIndexEntry.cs" />
+    <Compile Include="..\smapi-mod\Models\EventScriptChoiceIndex.cs" Link="Linked\Models\EventScriptChoiceIndex.cs" />
+    <Compile Include="..\smapi-mod\Models\EventScriptChoiceEntry.cs" Link="Linked\Models\EventScriptChoiceEntry.cs" />
+    <Compile Include="..\smapi-mod\Models\EventKeySplitResult.cs" Link="Linked\Models\EventKeySplitResult.cs" />
+    <Compile Include="..\smapi-mod\Models\EventPreconditionParseResult.cs" Link="Linked\Models\EventPreconditionParseResult.cs" />
+    <Compile Include="..\smapi-mod\Models\EvidenceRef.cs" Link="Linked\Models\EvidenceRef.cs" />
+    <Compile Include="..\smapi-mod\Models\ExportState.cs" Link="Linked\Models\ExportState.cs" />
+    <Compile Include="..\smapi-mod\Models\ModScanReport.cs" Link="Linked\Models\ModScanReport.cs" />
+    <Compile Include="..\smapi-mod\Models\RelatedDialogueRef.cs" Link="Linked\Models\RelatedDialogueRef.cs" />
+    <Compile Include="..\smapi-mod\Models\RelatedEventChoiceRef.cs" Link="Linked\Models\RelatedEventChoiceRef.cs" />
+    <Compile Include="..\smapi-mod\Models\RuntimeGameState.cs" Link="Linked\Models\RuntimeGameState.cs" />
+    <Compile Include="..\smapi-mod\Models\RuntimeStateExport.cs" Link="Linked\Models\RuntimeStateExport.cs" />
+    <Compile Include="..\smapi-mod\Models\ScannedMod.cs" Link="Linked\Models\ScannedMod.cs" />
+    <Compile Include="..\smapi-mod\Models\StoryNode.cs" Link="Linked\Models\StoryNode.cs" />
+    <Compile Include="..\smapi-mod\Models\StoryNodeEvaluation.cs" Link="Linked\Models\StoryNodeEvaluation.cs" />
+    <Compile Include="..\smapi-mod\Models\StoryStateEvaluationReport.cs" Link="Linked\Models\StoryStateEvaluationReport.cs" />
+    <Compile Include="..\smapi-mod\Models\StoryNodeStatus.cs" Link="Linked\Models\StoryNodeStatus.cs" />
+    <Compile Include="..\smapi-mod\Models\StoryRawEventIndex.cs" Link="Linked\Models\StoryRawEventIndex.cs" />
+    <Compile Include="..\smapi-mod\Services\DialogueIndexParser.cs" Link="Linked\Services\DialogueIndexParser.cs" />
+    <Compile Include="..\smapi-mod\Services\ConditionEvaluator.cs" Link="Linked\Services\ConditionEvaluator.cs" />
+    <Compile Include="..\smapi-mod\Services\EventIndexBuilder.cs" Link="Linked\Services\EventIndexBuilder.cs" />
+    <Compile Include="..\smapi-mod\Services\EventKeySplitter.cs" Link="Linked\Services\EventKeySplitter.cs" />
+    <Compile Include="..\smapi-mod\Services\EventPreconditionParser.cs" Link="Linked\Services\EventPreconditionParser.cs" />
+    <Compile Include="..\smapi-mod\Services\EventScriptChoiceIndexParser.cs" Link="Linked\Services\EventScriptChoiceIndexParser.cs" />
+    <Compile Include="..\smapi-mod\Services\JsonExportOptions.cs" Link="Linked\Services\JsonExportOptions.cs" />
+    <Compile Include="..\smapi-mod\Services\LooseJsonParser.cs" Link="Linked\Services\LooseJsonParser.cs" />
+    <Compile Include="..\smapi-mod\Services\StoryStateEvaluationExporter.cs" Link="Linked\Services\StoryStateEvaluationExporter.cs" />
+    <Compile Include="..\smapi-mod\Services\StoryStateEvaluator.cs" Link="Linked\Services\StoryStateEvaluator.cs" />
+    <Compile Include="..\smapi-mod\Services\RuntimeStoryStateRefreshService.cs" Link="Linked\Services\RuntimeStoryStateRefreshService.cs" />
+    <Compile Include="..\smapi-mod\Services\StoryNodeStatusClassifier.cs" Link="Linked\Services\StoryNodeStatusClassifier.cs" />
+    <Compile Include="..\smapi-mod\Services\StoryNodeDialogueLinker.cs" Link="Linked\Services\StoryNodeDialogueLinker.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="TestData\**\*">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="..\shared\mock-runtime-state.json" Link="Shared\mock-runtime-state.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <Target Name="ValidateNewtonsoftReference" BeforeTargets="ResolveReferences">
+    <Error
+      Condition="!Exists('$(NewtonsoftAssemblyPath)')"
+      Text="Could not find Newtonsoft.Json.dll at '$(NewtonsoftAssemblyPath)'. Expected it under the SMAPI install's smapi-internal folder."
+    />
+  </Target>
+</Project>
