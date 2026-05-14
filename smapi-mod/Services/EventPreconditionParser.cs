@@ -7,13 +7,28 @@ public sealed class EventPreconditionParser
 {
     private static readonly Dictionary<string, string> PositiveAliasMap = new(StringComparer.Ordinal)
     {
+        ["*"] = "WorldState",
+        ["*n"] = "HostOrLocalMail",
+        ["a"] = "Tile",
+        ["b"] = "ReachedMineBottom",
+        ["B"] = "SpouseBed",
         ["s"] = "Season",
-        ["d"] = "DayOfMonth",
+        ["c"] = "FreeInventorySlots",
+        ["D"] = "Dating",
         ["t"] = "Time",
         ["w"] = "Weather",
         ["f"] = "Friendship",
         ["e"] = "SawEvent",
+        ["G"] = "GameStateQuery",
+        ["h"] = "MissingPet",
+        ["Hn"] = "HostMail",
+        ["i"] = "HasItem",
         ["q"] = "ChoseDialogueAnswers",
+        ["J"] = "JojaBundlesDone",
+        ["L"] = "InUpgradedHouse",
+        ["m"] = "EarnedMoney",
+        ["M"] = "HasMoney",
+        ["N"] = "GoldenWalnuts",
         ["n"] = "LocalMail",
         ["y"] = "Year",
         ["O"] = "Spouse",
@@ -25,17 +40,24 @@ public sealed class EventPreconditionParser
         ["r"] = "Random",
         ["C"] = "CommunityCenterOrWarehouseDone",
         ["H"] = "IsHost",
-        ["R"] = "Roommate"
+        ["R"] = "Roommate",
+        ["S"] = "SawSecretNote"
     };
 
     private static readonly Dictionary<string, string> NegativeAliasMap = new(StringComparer.Ordinal)
     {
         ["o"] = "Spouse",
         ["k"] = "SawEvent",
+        ["d"] = "DayOfWeek",
         ["l"] = "LocalMail",
+        ["Hl"] = "HostMail",
+        ["*l"] = "HostOrLocalMail",
+        ["Rf"] = "Roommate",
         ["z"] = "Season",
+        ["U"] = "UpcomingFestival",
         ["A"] = "ActiveDialogueEvent",
-        ["F"] = "FestivalDay"
+        ["F"] = "FestivalDay",
+        ["X"] = "CommunityCenterOrWarehouseDone"
     };
 
     public EventPreconditionParseResult Parse(IEnumerable<string> rawPreconditionFragments)
@@ -259,28 +281,44 @@ public sealed class EventPreconditionParser
         return keyword.ToLowerInvariant() switch
         {
             "activedialogueevent" => "ActiveDialogueEvent",
+            "communitycenterorwarehousedone" => "CommunityCenterOrWarehouseDone",
             "season" => "Season",
             "dayofmonth" => "DayOfMonth",
             "dayofweek" => "DayOfWeek",
             "festivalday" => "FestivalDay",
+            "freeinventoryslots" => "FreeInventorySlots",
+            "dating" => "Dating",
             "time" => "Time",
             "weather" => "Weather",
             "friendship" => "Friendship",
             "sawevent" => "SawEvent",
+            "gamestatequery" => "GameStateQuery",
             "localmail" => "LocalMail",
             "hostmail" => "HostMail",
             "hostorlocalmail" => "HostOrLocalMail",
             "chosedialogueanswers" => "ChoseDialogueAnswers",
+            "inupgradedhouse" => "InUpgradedHouse",
+            "jojabundlesdone" => "JojaBundlesDone",
+            "goldenwalnuts" => "GoldenWalnuts",
+            "earnedmoney" => "EarnedMoney",
+            "hasmoney" => "HasMoney",
+            "missingpet" => "MissingPet",
+            "hasitem" => "HasItem",
             "spouse" => "Spouse",
+            "spousebed" => "SpouseBed",
             "year" => "Year",
             "daysplayed" => "DaysPlayed",
             "gender" => "Gender",
             "npcvisiblehere" => "NpcVisibleHere",
             "npcvisible" => "NPCVisible",
-            "communitycenterorwarehousedone" => "CommunityCenterOrWarehouseDone",
             "ishost" => "IsHost",
             "roommate" => "Roommate",
             "random" => "Random",
+            "reachedminebottom" => "ReachedMineBottom",
+            "sawsecretnote" => "SawSecretNote",
+            "tile" => "Tile",
+            "upcomingfestival" => "UpcomingFestival",
+            "worldstate" => "WorldState",
             _ => null
         };
     }

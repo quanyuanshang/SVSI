@@ -8,6 +8,7 @@ public sealed class RuntimeStoryStateRefreshService
     private readonly StoryStateEvaluationExporter storyStateEvaluationExporter;
     private readonly StoryStateEvaluator storyStateEvaluator;
     private readonly EventHistoryTracker eventHistoryTracker;
+    private readonly TranslationCatalog translationCatalog;
     private readonly Action<string>? logInfo;
     private readonly Action<string>? logWarning;
     private readonly Action<string>? logDebug;
@@ -24,6 +25,7 @@ public sealed class RuntimeStoryStateRefreshService
             new StoryStateEvaluationExporter(),
             new StoryStateEvaluator(),
             new EventHistoryTracker(),
+            new TranslationCatalog(),
             logInfo,
             logWarning,
             logDebug,
@@ -44,6 +46,7 @@ public sealed class RuntimeStoryStateRefreshService
             storyStateEvaluationExporter,
             storyStateEvaluator,
             new EventHistoryTracker(),
+            new TranslationCatalog(),
             logInfo,
             logWarning,
             logDebug,
@@ -56,6 +59,7 @@ public sealed class RuntimeStoryStateRefreshService
         StoryStateEvaluationExporter storyStateEvaluationExporter,
         StoryStateEvaluator storyStateEvaluator,
         EventHistoryTracker eventHistoryTracker,
+        TranslationCatalog translationCatalog,
         Action<string>? logInfo = null,
         Action<string>? logWarning = null,
         Action<string>? logDebug = null,
@@ -65,6 +69,7 @@ public sealed class RuntimeStoryStateRefreshService
         this.storyStateEvaluationExporter = storyStateEvaluationExporter;
         this.storyStateEvaluator = storyStateEvaluator;
         this.eventHistoryTracker = eventHistoryTracker;
+        this.translationCatalog = translationCatalog;
         this.logInfo = logInfo;
         this.logWarning = logWarning;
         this.logDebug = logDebug;
@@ -92,7 +97,7 @@ public sealed class RuntimeStoryStateRefreshService
         try
         {
             var storyNodes = this.storyStateEvaluationExporter.LoadStoryNodesFromFile(storyIndexPath);
-            var report = this.storyStateEvaluator.Evaluate(storyNodes, runtimeState);
+            var report = this.storyStateEvaluator.Evaluate(storyNodes, runtimeState, this.translationCatalog);
 
             EnsureParentDirectory(evaluatedOutputPath);
             EnsureParentDirectory(exportStatePath);

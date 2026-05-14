@@ -28,6 +28,7 @@ try
     EventKeySplitterTests.RunAll();
     EventPreconditionParserTests.RunAll();
     EventIndexBuilderTests.RunAll();
+    TranslationCatalogBuilderTests.RunAll();
     Console.WriteLine("All tests passed.");
     return 0;
 }

@@ -9,6 +9,9 @@ internal static class StoryStateEvaluatorTests
     {
         Evaluate_FiveNodes_ProducesExpectedCountsAndOrder();
         Evaluate_NodeWithUnknownPatchWhen_IsUnknownNotCurrent();
+        Evaluate_NodeWithRelationshipPatchWhen_Failed_IsLocked();
+        Evaluate_NodeWithHeartsPatchWhen_Failed_IsLocked();
+        Evaluate_NodeWithFarmerCheaterPatchWhen_Passed_IsCurrent();
         Evaluate_NonNumericEventIdWithoutPreconditions_IsUnknownNotCurrent();
     }
 
@@ -87,7 +90,7 @@ internal static class StoryStateEvaluatorTests
         );
         node.PatchWhenConditions.Add(new PatchWhenCondition
         {
-            Key = "Relationship:Alex",
+            Key = "CustomToken:Alex",
             Value = "Engaged",
             IsKnown = false,
             Reason = "Patch-level When condition is not evaluated."
@@ -97,8 +100,102 @@ internal static class StoryStateEvaluatorTests
 
         AssertEqual(StoryNodeStatus.Unknown, report.Nodes.Single().Status, "Unknown CP When should prevent Current status.");
         AssertTrue(
-            report.Nodes.Single().StatusReason.Contains("Relationship:Alex", StringComparison.Ordinal),
+            report.Nodes.Single().StatusReason.Contains("CustomToken:Alex", StringComparison.Ordinal),
             "Status reason should mention the unknown CP When condition."
+        );
+    }
+
+    private static void Evaluate_NodeWithRelationshipPatchWhen_Failed_IsLocked()
+    {
+        var evaluator = new StoryStateEvaluator();
+        var state = CreateBaseState();
+        var node = CreateNode(
+            eventId: "300002",
+            sourceModId: "Tests.PatchWhen",
+            sourceModName: "Patch When Pack",
+            location: "Town",
+            conditionAst: CreateAtom("Dating", "D Sebastian", "Sebastian")
+        );
+        node.PatchWhenConditions.Add(new PatchWhenCondition
+        {
+            Key = "Relationship:Sebastian |contains=Engaged",
+            Value = "true",
+            RawValue = "true",
+            IsKnown = false,
+            Reason = "Patch-level Content Patcher When condition is not evaluated by the runtime story-state evaluator."
+        });
+
+        var report = evaluator.Evaluate(new[] { node }, state);
+        var evaluation = report.Nodes.Single();
+
+        AssertEqual(StoryNodeStatus.Locked, evaluation.Status, "Known-failed relationship CP When should lock the node.");
+        AssertTrue(
+            evaluation.PatchWhenConditions.Single().IsKnown && evaluation.PatchWhenConditions.Single().Passed == false,
+            "Relationship CP When should be evaluated and marked failed."
+        );
+        AssertTrue(
+            evaluation.StatusReason.Contains("Patch-level progression conditions failed", StringComparison.Ordinal),
+            "Status reason should mention patch-level progression failure."
+        );
+    }
+
+    private static void Evaluate_NodeWithHeartsPatchWhen_Failed_IsLocked()
+    {
+        var evaluator = new StoryStateEvaluator();
+        var state = CreateBaseState();
+        var node = CreateNode(
+            eventId: "300003",
+            sourceModId: "Tests.PatchWhen",
+            sourceModName: "Patch When Pack",
+            location: "Town",
+            conditionAst: CreateAtom("Season", "s fall", "fall")
+        );
+        node.PatchWhenConditions.Add(new PatchWhenCondition
+        {
+            Key = "Hearts:Victor",
+            Value = "10",
+            RawValue = "\"10\"",
+            IsKnown = false,
+            Reason = "Patch-level Content Patcher When condition is not evaluated by the runtime story-state evaluator."
+        });
+
+        var report = evaluator.Evaluate(new[] { node }, state);
+        var evaluation = report.Nodes.Single();
+
+        AssertEqual(StoryNodeStatus.Locked, evaluation.Status, "Known-failed hearts CP When should lock the node.");
+        AssertTrue(
+            evaluation.PatchWhenConditions.Single().IsKnown && evaluation.PatchWhenConditions.Single().Passed == false,
+            "Hearts CP When should be evaluated and marked failed."
+        );
+    }
+
+    private static void Evaluate_NodeWithFarmerCheaterPatchWhen_Passed_IsCurrent()
+    {
+        var evaluator = new StoryStateEvaluator();
+        var state = CreateBaseState(installedModIds: new[] { "Pathoschild.ContentPatcher" });
+        var node = CreateNode(
+            eventId: "300004",
+            sourceModId: "maggplays.SamSpicyExpansion",
+            sourceModName: "Maggs Immersive Sam Spicy Expansion",
+            location: "Town",
+            conditionAst: CreateAtom("Season", "s fall", "fall")
+        );
+        node.PatchWhenConditions.Add(new PatchWhenCondition
+        {
+            Key = "FarmerCheater",
+            Value = "no",
+            RawValue = "\"no\"",
+            IsKnown = false,
+            Reason = "Patch-level Content Patcher When condition is not evaluated by the runtime story-state evaluator."
+        });
+
+        var report = evaluator.Evaluate(new[] { node }, state);
+        var evaluation = report.Nodes.Single();
+
+        AssertEqual(StoryNodeStatus.Current, evaluation.Status, "Resolved FarmerCheater=no should no longer force Unknown.");
+        AssertTrue(
+            evaluation.PatchWhenConditions.Single().IsKnown && evaluation.PatchWhenConditions.Single().Passed == true,
+            "FarmerCheater should be evaluated and marked passed."
         );
     }
 
@@ -209,7 +306,7 @@ internal static class StoryStateEvaluatorTests
         };
     }
 
-    private static RuntimeGameState CreateBaseState()
+    private static RuntimeGameState CreateBaseState(IEnumerable<string>? installedModIds = null)
     {
         return new RuntimeGameState
         {
@@ -221,11 +318,15 @@ internal static class StoryStateEvaluatorTests
             Weather = "sunny",
             CurrentLocation = "Town",
             PlayerName = "MockFarmer",
+            InstalledModIds = new HashSet<string>(installedModIds ?? Array.Empty<string>(), StringComparer.Ordinal),
             FriendshipPoints = new Dictionary<string, int>(StringComparer.Ordinal)
             {
                 ["Shane"] = 2200,
-                ["Sam"] = 1000
+                ["Sam"] = 1000,
+                ["Sebastian"] = 2250,
+                ["Victor"] = 2000
             },
+            DatingNpcNames = new HashSet<string>(new[] { "Sebastian" }, StringComparer.Ordinal),
             SeenEvents = new HashSet<string>(new[] { "100001" }, StringComparer.Ordinal),
             Mail = new HashSet<string>(new[] { "someMail" }, StringComparer.Ordinal),
             DialogueAnswers = new HashSet<string>(new[] { "ShaneAnswerA" }, StringComparer.Ordinal)

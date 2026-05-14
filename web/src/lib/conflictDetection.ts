@@ -184,8 +184,8 @@ function buildReason(sharedNpcNames: string[], sharedLocation: string | null): s
   const npcSummary = sharedNpcNames.join(", ");
 
   if (sharedLocation) {
-    return `Potential conflict: shared NPC ${npcSummary}, shared location ${sharedLocation}, and possible time overlap.`;
+    return `潜在冲突：共享角色 ${npcSummary}，共享地点 ${sharedLocation}，且触发时间可能重叠。`;
   }
 
-  return `Potential conflict: shared NPC ${npcSummary} and possible time overlap.`;
+  return `潜在冲突：共享角色 ${npcSummary}，且触发时间可能重叠。`;
 }

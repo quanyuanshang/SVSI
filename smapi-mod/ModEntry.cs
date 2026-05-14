@@ -52,6 +52,7 @@ public sealed class ModEntry : Mod
         );
 
         var modScanReport = new ModScanner(this.Monitor).Scan(modsDirectory);
+        var translationCatalog = new TranslationCatalogBuilder().Build(modScanReport.Mods);
         this.WriteJson(Path.Combine(this.exportDirectory, "mods.json"), modScanReport);
 
         var storyIndex = new EventIndexBuilder().Build(modScanReport.Mods);
@@ -100,9 +101,13 @@ public sealed class ModEntry : Mod
             LogLevel.Info
         );
 
-        var runtimeStateCollector = new RuntimeStateCollector();
+        var runtimeStateCollector = new RuntimeStateCollector(helper.ModRegistry);
         this.refreshService = new RuntimeStoryStateRefreshService(
             runtimeStateCollector.Collect,
+            new StoryStateEvaluationExporter(),
+            new StoryStateEvaluator(),
+            new EventHistoryTracker(),
+            translationCatalog,
             logInfo: message => this.Monitor.Log(message, LogLevel.Info),
             logWarning: message => this.Monitor.Log(message, LogLevel.Warn),
             logDebug: message => this.Monitor.Log(message, LogLevel.Debug),

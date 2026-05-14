@@ -43,6 +43,19 @@ public sealed class StoryNodeStatusClassifier
             );
         }
 
+        var failedPatchWhenConditions = node.PatchWhenConditions
+            .Where(condition => condition.IsKnown && condition.Passed == false && condition.IsProgressionSensitive)
+            .ToList();
+        if (failedPatchWhenConditions.Count > 0)
+        {
+            return this.CreateEvaluation(
+                node,
+                conditionResult,
+                StoryNodeStatus.Locked,
+                $"Patch-level progression conditions failed: {string.Join("; ", failedPatchWhenConditions.Select(condition => condition.Reason))}"
+            );
+        }
+
         var progressionFailures = conditionResult.AtomResults
             .Where(atom => atom.Passed == false && atom.IsProgressionSensitive)
             .ToList();

@@ -10,5 +10,9 @@ public sealed class PatchWhenCondition
 
     public bool IsKnown { get; init; }
 
+    public bool? Passed { get; init; }
+
+    public bool IsProgressionSensitive { get; init; }
+
     public string Reason { get; init; } = string.Empty;
 }

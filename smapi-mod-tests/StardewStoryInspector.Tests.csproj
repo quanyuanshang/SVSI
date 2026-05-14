@@ -54,6 +54,7 @@
     <Compile Include="..\smapi-mod\Models\StoryStateEvaluationReport.cs" Link="Linked\Models\StoryStateEvaluationReport.cs" />
     <Compile Include="..\smapi-mod\Models\StoryNodeStatus.cs" Link="Linked\Models\StoryNodeStatus.cs" />
     <Compile Include="..\smapi-mod\Models\StoryRawEventIndex.cs" Link="Linked\Models\StoryRawEventIndex.cs" />
+    <Compile Include="..\smapi-mod\Models\TranslationCatalog.cs" Link="Linked\Models\TranslationCatalog.cs" />
     <Compile Include="..\smapi-mod\Services\DialogueIndexParser.cs" Link="Linked\Services\DialogueIndexParser.cs" />
     <Compile Include="..\smapi-mod\Services\ConditionEvaluator.cs" Link="Linked\Services\ConditionEvaluator.cs" />
     <Compile Include="..\smapi-mod\Services\EventHistoryStore.cs" Link="Linked\Services\EventHistoryStore.cs" />
@@ -66,6 +67,7 @@
     <Compile Include="..\smapi-mod\Services\LooseJsonParser.cs" Link="Linked\Services\LooseJsonParser.cs" />
     <Compile Include="..\smapi-mod\Services\StoryStateEvaluationExporter.cs" Link="Linked\Services\StoryStateEvaluationExporter.cs" />
     <Compile Include="..\smapi-mod\Services\StoryStateEvaluator.cs" Link="Linked\Services\StoryStateEvaluator.cs" />
+    <Compile Include="..\smapi-mod\Services\TranslationCatalogBuilder.cs" Link="Linked\Services\TranslationCatalogBuilder.cs" />
     <Compile Include="..\smapi-mod\Services\RuntimeStoryStateRefreshService.cs" Link="Linked\Services\RuntimeStoryStateRefreshService.cs" />
     <Compile Include="..\smapi-mod\Services\StoryNodeStatusClassifier.cs" Link="Linked\Services\StoryNodeStatusClassifier.cs" />
     <Compile Include="..\smapi-mod\Services\StoryNodeDialogueLinker.cs" Link="Linked\Services\StoryNodeDialogueLinker.cs" />

@@ -12,12 +12,15 @@ public sealed class ConditionEvaluator
         "DayOfWeek",
         "Time",
         "Weather",
-        "Location"
+        "Location",
+        "NpcVisibleHere",
+        "InUpgradedHouse"
     };
 
     private static readonly HashSet<string> ProgressionSensitiveAtomTypes = new(StringComparer.Ordinal)
     {
         "Friendship",
+        "Dating",
         "SawEvent",
         "Mail",
         "LocalMail",
@@ -174,6 +177,9 @@ public sealed class ConditionEvaluator
             "Time" => this.EvaluateTimeAtom(raw, node.Values, state),
             "Weather" => this.EvaluateWeatherAtom(raw, node.Values, state),
             "Friendship" => this.EvaluateFriendshipAtom(raw, node.Values, state),
+            "Dating" => this.EvaluateDatingAtom(raw, node.Values, state),
+            "NpcVisibleHere" => this.EvaluateNpcVisibleHereAtom(raw, node.Values, state),
+            "InUpgradedHouse" => this.EvaluateInUpgradedHouseAtom(raw, state),
             "SawEvent" => this.EvaluateSawEventAtom(raw, node.Values, state),
             "LocalMail" or "HostMail" or "HostOrLocalMail" => this.EvaluateMailAtom(raw, atomType, node.Values, state),
             "ChoseDialogueAnswers" => this.EvaluateDialogueAnswerAtom(raw, node.Values, state),
@@ -351,6 +357,61 @@ public sealed class ConditionEvaluator
             allPassed
                 ? $"Friendship matched: {string.Join("; ", pairReasons)}"
                 : $"Friendship failed: {string.Join("; ", pairReasons)}"
+        );
+    }
+
+    private ConditionAtomResult EvaluateDatingAtom(string raw, IReadOnlyList<string> values, RuntimeGameState state)
+    {
+        if (values.Count == 0 || string.IsNullOrWhiteSpace(values[0]))
+        {
+            return this.CreateUnknownAtomResult(raw, "Dating", "Dating condition has no npc name.");
+        }
+
+        var npcName = values[0];
+        var matched = state.DatingNpcNames.Contains(npcName);
+        return this.CreateAtomResult(
+            raw,
+            "Dating",
+            matched,
+            matched
+                ? $"Dating matched: player is dating {npcName}"
+                : $"Dating failed: player is not dating {npcName}"
+        );
+    }
+
+    private ConditionAtomResult EvaluateNpcVisibleHereAtom(string raw, IReadOnlyList<string> values, RuntimeGameState state)
+    {
+        if (values.Count == 0 || string.IsNullOrWhiteSpace(values[0]))
+        {
+            return this.CreateUnknownAtomResult(raw, "NpcVisibleHere", "NpcVisibleHere condition has no npc name.");
+        }
+
+        var npcName = values[0];
+        var matched = state.VisibleNpcNamesHere.Contains(npcName);
+        return this.CreateAtomResult(
+            raw,
+            "NpcVisibleHere",
+            matched,
+            matched
+                ? $"NpcVisibleHere matched: {npcName} is currently visible in this location"
+                : $"NpcVisibleHere failed: {npcName} is not currently visible in this location"
+        );
+    }
+
+    private ConditionAtomResult EvaluateInUpgradedHouseAtom(string raw, RuntimeGameState state)
+    {
+        if (state.InUpgradedHouse is null)
+        {
+            return this.CreateUnknownAtomResult(raw, "InUpgradedHouse", "InUpgradedHouse runtime state is unavailable.");
+        }
+
+        return this.CreateAtomResult(
+            raw,
+            "InUpgradedHouse",
+            state.InUpgradedHouse.Value,
+            state.InUpgradedHouse.Value
+                ? "InUpgradedHouse matched: player is currently inside an upgraded farmhouse or cabin."
+                : "InUpgradedHouse failed: player is not currently inside an upgraded farmhouse or cabin."
         );
     }
 

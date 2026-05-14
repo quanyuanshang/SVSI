@@ -6,6 +6,8 @@ public sealed class StoryStateEvaluationReport
 
     public RuntimeGameState RuntimeState { get; init; } = new();
 
+    public TranslationCatalog TranslationCatalog { get; init; } = new();
+
     public int TotalNodeCount { get; init; }
 
     public Dictionary<string, int> StatusCounts { get; init; } = new(StringComparer.Ordinal);

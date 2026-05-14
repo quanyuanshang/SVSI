@@ -11,22 +11,32 @@ internal static class EventPreconditionParserTests
         Parse_NotWrapsExpression();
         Parse_SeasonAlias();
         Parse_DayOfMonthAlias();
+        Parse_DatingAliasUppercase();
+        Parse_DayOfWeekNegatedAliasLowercase();
         Parse_DayOfWeek();
         Parse_TimeAlias();
         Parse_WeatherAlias();
         Parse_FriendshipSupportsMultiplePairs();
         Parse_SawEventMultipleIdsUseAnyOf();
+        Parse_NotSawEventAliasUsesNotAnyOf();
         Parse_LocalMail();
         Parse_LocalMailAlias();
         Parse_HostMail();
+        Parse_HostMailAlias();
         Parse_HostOrLocalMail();
+        Parse_HostOrLocalMailAlias();
         Parse_SpouseAliasUppercase();
         Parse_NotSpouseAliasLowercase();
+        Parse_NpcVisibleHereAlias();
+        Parse_InUpgradedHouseAlias();
+        Parse_SpouseBedAlias();
         Parse_YearAlias();
-        Parse_NotSawEventAliasUsesNotAnyOf();
         Parse_NotActiveDialogueEvent();
+        Parse_NotUpcomingFestivalAlias();
+        Parse_NotRoommateAlias();
+        Parse_NotCommunityCenterDoneAlias();
         Parse_ChoseDialogueAnswersMultipleIdsUseAllOf();
-        Parse_UnknownFragmentBecomesUnknownNode();
+        Parse_GameStateQueryAlias();
     }
 
     private static void Parse_MultipleFragments_DefaultToAllOf()
@@ -57,8 +67,24 @@ internal static class EventPreconditionParserTests
 
     private static void Parse_DayOfMonthAlias()
     {
-        var result = Parse("d 14");
-        AssertAtom(result.ConditionAst.Children.Single(), "DayOfMonth", "d 14", "14");
+        var result = Parse("u 14");
+        AssertAtom(result.ConditionAst.Children.Single(), "DayOfMonth", "u 14", "14");
+    }
+
+    private static void Parse_DatingAliasUppercase()
+    {
+        var result = Parse("D Shane");
+        AssertAtom(result.ConditionAst.Children.Single(), "Dating", "D Shane", "Shane");
+    }
+
+    private static void Parse_DayOfWeekNegatedAliasLowercase()
+    {
+        var result = Parse("d Friday");
+        var node = result.ConditionAst.Children.Single();
+
+        AssertEqual("Not", node.Type, "Lowercase d should become Not.");
+        AssertNotNull(node.Operand, "Negated DayOfWeek alias should have an operand.");
+        AssertAtom(node.Operand!, "DayOfWeek", "d Friday", "Friday");
     }
 
     private static void Parse_DayOfWeek()
@@ -120,10 +146,22 @@ internal static class EventPreconditionParserTests
         AssertAtom(result.ConditionAst.Children.Single(), "HostMail", "HostMail hostFlag", "hostFlag");
     }
 
+    private static void Parse_HostMailAlias()
+    {
+        var result = Parse("Hn hostFlag");
+        AssertAtom(result.ConditionAst.Children.Single(), "HostMail", "Hn hostFlag", "hostFlag");
+    }
+
     private static void Parse_HostOrLocalMail()
     {
         var result = Parse("HostOrLocalMail sharedFlag");
         AssertAtom(result.ConditionAst.Children.Single(), "HostOrLocalMail", "HostOrLocalMail sharedFlag", "sharedFlag");
+    }
+
+    private static void Parse_HostOrLocalMailAlias()
+    {
+        var result = Parse("*n sharedFlag");
+        AssertAtom(result.ConditionAst.Children.Single(), "HostOrLocalMail", "*n sharedFlag", "sharedFlag");
     }
 
     private static void Parse_SpouseAliasUppercase()
@@ -140,6 +178,24 @@ internal static class EventPreconditionParserTests
         AssertEqual("Not", node.Type, "Lowercase o should become Not.");
         AssertNotNull(node.Operand, "Not spouse alias should have an operand.");
         AssertAtom(node.Operand!, "Spouse", "o Wizard", "Wizard");
+    }
+
+    private static void Parse_NpcVisibleHereAlias()
+    {
+        var result = Parse("p Shane");
+        AssertAtom(result.ConditionAst.Children.Single(), "NpcVisibleHere", "p Shane", "Shane");
+    }
+
+    private static void Parse_InUpgradedHouseAlias()
+    {
+        var result = Parse("L");
+        AssertAtom(result.ConditionAst.Children.Single(), "InUpgradedHouse", "L");
+    }
+
+    private static void Parse_SpouseBedAlias()
+    {
+        var result = Parse("B");
+        AssertAtom(result.ConditionAst.Children.Single(), "SpouseBed", "B");
     }
 
     private static void Parse_YearAlias()
@@ -171,6 +227,36 @@ internal static class EventPreconditionParserTests
         AssertAtom(node.Operand!, "ActiveDialogueEvent", "ActiveDialogueEvent ccVault", "ccVault");
     }
 
+    private static void Parse_NotUpcomingFestivalAlias()
+    {
+        var result = Parse("U");
+        var node = result.ConditionAst.Children.Single();
+
+        AssertEqual("Not", node.Type, "U alias should become Not.");
+        AssertNotNull(node.Operand, "Not upcoming festival alias should have an operand.");
+        AssertAtom(node.Operand!, "UpcomingFestival", "U");
+    }
+
+    private static void Parse_NotRoommateAlias()
+    {
+        var result = Parse("Rf Krobus");
+        var node = result.ConditionAst.Children.Single();
+
+        AssertEqual("Not", node.Type, "Rf alias should become Not.");
+        AssertNotNull(node.Operand, "Not roommate alias should have an operand.");
+        AssertAtom(node.Operand!, "Roommate", "Rf Krobus", "Krobus");
+    }
+
+    private static void Parse_NotCommunityCenterDoneAlias()
+    {
+        var result = Parse("X");
+        var node = result.ConditionAst.Children.Single();
+
+        AssertEqual("Not", node.Type, "X alias should become Not.");
+        AssertNotNull(node.Operand, "Not community center alias should have an operand.");
+        AssertAtom(node.Operand!, "CommunityCenterOrWarehouseDone", "X");
+    }
+
     private static void Parse_ChoseDialogueAnswersMultipleIdsUseAllOf()
     {
         var result = Parse("q answerA answerB");
@@ -182,18 +268,16 @@ internal static class EventPreconditionParserTests
         AssertAtom(node.Children[1], "ChoseDialogueAnswers", "q answerB", "answerB");
     }
 
-    private static void Parse_UnknownFragmentBecomesUnknownNode()
+    private static void Parse_GameStateQueryAlias()
     {
-        var result = Parse("GameStateQuery hasSomething");
-        var node = result.ConditionAst.Children.Single();
-
-        AssertEqual("Unknown", node.Type, "Unknown fragment should become Unknown node.");
-        AssertEqual("GameStateQuery hasSomething", node.Raw, "Unknown raw mismatch.");
-        AssertSequenceEqual(
-            new[] { "GameStateQuery hasSomething" },
-            result.UnknownFragments,
-            "Unknown fragments list mismatch."
-        );
+        var result = Parse("G PLAYER_HAS_ITEM CurrentTool IridiumHoe");
+        AssertAtom(
+            result.ConditionAst.Children.Single(),
+            "GameStateQuery",
+            "G PLAYER_HAS_ITEM CurrentTool IridiumHoe",
+            "PLAYER_HAS_ITEM",
+            "CurrentTool",
+            "IridiumHoe");
     }
 
     private static EventPreconditionParseResult Parse(params string[] fragments)

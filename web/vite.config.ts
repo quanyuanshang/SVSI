@@ -1,10 +1,22 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
+
+const DEFAULT_DATA_DIR =
+  "D:\\SteamLibrary\\steamapps\\common\\Stardew Valley\\StardewStoryInspector";
+
+function resolveDataDirectory(): string | null {
+  const fromEnv = process.env.STORY_INSPECTOR_DATA_DIR?.trim();
+  if (fromEnv) {
+    return fromEnv;
+  }
+
+  return DEFAULT_DATA_DIR || null;
+}
 
 function storyStateApiPlugin(): Plugin {
   return {
@@ -32,7 +44,7 @@ function storyStateApiPlugin(): Plugin {
           return;
         }
 
-        const dataDirectory = process.env.STORY_INSPECTOR_DATA_DIR;
+        const dataDirectory = resolveDataDirectory();
         if (!dataDirectory) {
           res.statusCode = 500;
           res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -95,12 +107,19 @@ function storyStateApiPlugin(): Plugin {
   };
 }
 
-export default defineConfig({
-  plugins: [react(), storyStateApiPlugin()],
-  publicDir: path.resolve(rootDir, "../shared"),
-  server: {
-    fs: {
-      allow: [path.resolve(rootDir, "..")],
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, rootDir, "STORY_INSPECTOR_");
+  if (env.STORY_INSPECTOR_DATA_DIR && !process.env.STORY_INSPECTOR_DATA_DIR) {
+    process.env.STORY_INSPECTOR_DATA_DIR = env.STORY_INSPECTOR_DATA_DIR;
+  }
+
+  return {
+    plugins: [react(), storyStateApiPlugin()],
+    publicDir: path.resolve(rootDir, "../shared"),
+    server: {
+      fs: {
+        allow: [path.resolve(rootDir, "..")],
+      },
     },
-  },
+  };
 });

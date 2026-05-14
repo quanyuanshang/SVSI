@@ -9,10 +9,24 @@
     "weather": "sunny",
     "currentLocation": "Town",
     "playerName": "MockFarmer",
+    "installedModIds": [
+      "Pathoschild.ContentPatcher"
+    ],
     "friendshipPoints": {
       "Shane": 2200,
       "Sam": 1000
     },
+    "spouseName": "Hovsep",
+    "spouse": "Hovsep",
+    "marriedTo": "Hovsep",
+    "spouses": [
+      "Hovsep"
+    ],
+    "engagedTo": "Sebastian",
+    "roommate": "Krobus",
+    "datingNpcNames": [
+      "Sam"
+    ],
     "seenEvents": [
       "100001"
     ],

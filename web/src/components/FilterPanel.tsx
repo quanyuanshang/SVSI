@@ -1,3 +1,5 @@
+import { formatStatusLabel } from "../lib/format";
+import { translateCharacter, translateLocation } from "../lib/translations";
 import type {
   StoryFilterOptions,
   StoryFilterState,
@@ -40,19 +42,19 @@ export function FilterPanel({
   return (
     <aside className="panel filter-panel">
       <div className="panel-heading">
-        <h2>Status Counts</h2>
-        <p>Use the checkboxes to narrow the story list.</p>
+        <h2>筛选条件</h2>
+        <p>默认按中文展示，raw 名称保留在提示里。</p>
       </div>
 
       <div className="summary-stat">
-        <span className="summary-stat__label">Total Nodes</span>
+        <span className="summary-stat__label">事件总数</span>
         <strong>{totalNodeCount ?? 0}</strong>
       </div>
 
       <ul className="status-count-list">
         {STATUS_ORDER.map((status) => (
           <li className="status-count-row" key={status}>
-            <span>{status}</span>
+            <span>{formatStatusLabel(status)}</span>
             <strong>{statusCounts?.[status] ?? 0}</strong>
           </li>
         ))}
@@ -60,13 +62,13 @@ export function FilterPanel({
 
       <div className="filter-section">
         <label className="filter-label" htmlFor="story-search">
-          Search
+          搜索
         </label>
         <input
           className="filter-input"
           id="story-search"
           onChange={(event) => onSearchTextChange(event.target.value)}
-          placeholder="Search event, mod, location, reason..."
+          placeholder="搜索事件、Mod、地点、角色、原因..."
           type="search"
           value={filters.searchText}
         />
@@ -79,32 +81,35 @@ export function FilterPanel({
             onChange={(event) => onHideTriggeredChange(event.target.checked)}
             type="checkbox"
           />
-          <span>Hide Triggered</span>
+          <span>隐藏已触发事件</span>
         </label>
       </div>
 
       <FilterGroup
-        label="Status"
+        label="触发状态"
         options={availableOptions.statuses}
         selectedOptions={filters.selectedStatuses}
+        renderOption={(value) => formatStatusLabel(value as StoryNodeStatus)}
         onToggleOption={(status) => onToggleStatus(status as StoryNodeStatus)}
       />
       <FilterGroup
-        label="Mod"
+        label="来源 Mod"
         options={availableOptions.modNames}
         selectedOptions={filters.selectedModNames}
         onToggleOption={onToggleModName}
       />
       <FilterGroup
-        label="Location"
+        label="地点"
         options={availableOptions.locations}
         selectedOptions={filters.selectedLocations}
+        renderOption={(value) => translateLocation(value).zh}
         onToggleOption={onToggleLocation}
       />
       <FilterGroup
-        label="NPC"
+        label="角色"
         options={availableOptions.npcNames}
         selectedOptions={filters.selectedNpcNames}
+        renderOption={(value) => translateCharacter(value).zh}
         onToggleOption={onToggleNpcName}
       />
     </aside>
@@ -116,6 +121,7 @@ interface FilterGroupProps {
   options: string[];
   selectedOptions: ReadonlySet<string>;
   onToggleOption: (value: string) => void;
+  renderOption?: (value: string) => string;
 }
 
 function FilterGroup({
@@ -123,22 +129,23 @@ function FilterGroup({
   options,
   selectedOptions,
   onToggleOption,
+  renderOption,
 }: FilterGroupProps) {
   return (
     <div className="filter-section">
       <p className="filter-label">{label}</p>
       {options.length === 0 ? (
-        <p className="filter-empty">No options</p>
+        <p className="filter-empty">暂无可选项</p>
       ) : (
         <div className="filter-option-list">
           {options.map((option) => (
-            <label className="checkbox-row" key={option}>
+            <label className="checkbox-row" key={option} title={option}>
               <input
                 checked={selectedOptions.has(option)}
                 onChange={() => onToggleOption(option)}
                 type="checkbox"
               />
-              <span>{option}</span>
+              <span>{renderOption ? renderOption(option) : option}</span>
             </label>
           ))}
         </div>

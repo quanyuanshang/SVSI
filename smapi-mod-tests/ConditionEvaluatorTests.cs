@@ -10,6 +10,9 @@ internal static class ConditionEvaluatorTests
         Evaluate_Season_TrueAndFalse();
         Evaluate_Time_TrueAndFalse();
         Evaluate_Friendship_TrueAndFalse();
+        Evaluate_Dating_TrueAndFalse();
+        Evaluate_NpcVisibleHere_TrueAndFalse();
+        Evaluate_InUpgradedHouse_TrueAndFalse();
         Evaluate_SawEvent_TrueAndFalse();
         Evaluate_Mail_TrueAndFalse();
         Evaluate_ChoseDialogueAnswers_TrueAndFalse();
@@ -61,6 +64,43 @@ internal static class ConditionEvaluatorTests
         var failed = evaluator.Evaluate(CreateAtom("Friendship", "f Shane 3000", "Shane", "3000"), state);
         AssertEqual(false, failed.Passed, "Friendship false case mismatch.");
         AssertContains(failed.Reason, "requires 3000", "Friendship false reason mismatch.");
+    }
+
+    private static void Evaluate_Dating_TrueAndFalse()
+    {
+        var evaluator = new ConditionEvaluator();
+        var state = CreateBaseState();
+
+        var matched = evaluator.Evaluate(CreateAtom("Dating", "D Shane", "Shane"), state);
+        AssertEqual(true, matched.Passed, "Dating true case mismatch.");
+
+        var failed = evaluator.Evaluate(CreateAtom("Dating", "D Sebastian", "Sebastian"), state);
+        AssertEqual(false, failed.Passed, "Dating false case mismatch.");
+    }
+
+    private static void Evaluate_NpcVisibleHere_TrueAndFalse()
+    {
+        var evaluator = new ConditionEvaluator();
+        var state = CreateBaseState();
+
+        var matched = evaluator.Evaluate(CreateAtom("NpcVisibleHere", "p Shane", "Shane"), state);
+        AssertEqual(true, matched.Passed, "NpcVisibleHere true case mismatch.");
+
+        var failed = evaluator.Evaluate(CreateAtom("NpcVisibleHere", "p Sebastian", "Sebastian"), state);
+        AssertEqual(false, failed.Passed, "NpcVisibleHere false case mismatch.");
+    }
+
+    private static void Evaluate_InUpgradedHouse_TrueAndFalse()
+    {
+        var evaluator = new ConditionEvaluator();
+        var upgraded = CreateBaseState(inUpgradedHouse: true);
+        var notUpgraded = CreateBaseState(inUpgradedHouse: false);
+
+        var matched = evaluator.Evaluate(CreateAtom("InUpgradedHouse", "L"), upgraded);
+        AssertEqual(true, matched.Passed, "InUpgradedHouse true case mismatch.");
+
+        var failed = evaluator.Evaluate(CreateAtom("InUpgradedHouse", "L"), notUpgraded);
+        AssertEqual(false, failed.Passed, "InUpgradedHouse false case mismatch.");
     }
 
     private static void Evaluate_SawEvent_TrueAndFalse()
@@ -180,7 +220,7 @@ internal static class ConditionEvaluatorTests
         AssertEqual(null, result.AtomResults[0].Passed, "Unknown atom result should be null.");
     }
 
-    private static RuntimeGameState CreateBaseState()
+    private static RuntimeGameState CreateBaseState(bool inUpgradedHouse = true, params string[] visibleNpcNamesHere)
     {
         return new RuntimeGameState
         {
@@ -197,6 +237,12 @@ internal static class ConditionEvaluatorTests
                 ["Shane"] = 2200,
                 ["Sam"] = 1000
             },
+            DatingNpcNames = new HashSet<string>(new[] { "Shane" }, StringComparer.Ordinal),
+            VisibleNpcNamesHere = new HashSet<string>(
+                visibleNpcNamesHere.Length > 0 ? visibleNpcNamesHere : new[] { "Shane", "Sam" },
+                StringComparer.Ordinal
+            ),
+            InUpgradedHouse = inUpgradedHouse,
             SeenEvents = new HashSet<string>(new[] { "100001" }, StringComparer.Ordinal),
             Mail = new HashSet<string>(new[] { "someMail" }, StringComparer.Ordinal),
             DialogueAnswers = new HashSet<string>(new[] { "ShaneAnswerA" }, StringComparer.Ordinal)

@@ -1,5 +1,5 @@
 import type { GameDateSnapshot } from "../types/history";
-import { formatStardewTime } from "./format";
+import { formatSeasonZh, formatStardewTime } from "./format";
 
 const seasonRanks: Record<string, number> = {
   spring: 0,
@@ -33,10 +33,10 @@ export function compareGameDates(
 
 export function formatGameDate(date?: GameDateSnapshot): string {
   if (!date) {
-    return "Unknown date";
+    return "日期未知";
   }
 
-  return `Year ${date.year} / ${date.season || "unknown"} / Day ${date.dayOfMonth} / ${formatStardewTime(date.time)}`;
+  return `第 ${date.year} 年 / ${formatSeasonZh(date.season)} / ${date.dayOfMonth} 日 / ${formatStardewTime(date.time)}`;
 }
 
 function emptyDate(): GameDateSnapshot {

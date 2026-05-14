@@ -1,10 +1,12 @@
 import { useMemo, useState } from "react";
 import { applyStoryFilters, getAvailableFilterOptions } from "../lib/storyFilters";
+import { loadTranslationCatalog } from "../lib/translations";
 import type {
   StoryFilterOptions,
   StoryFilterState,
   StoryNodeEvaluation,
   StoryNodeStatus,
+  TranslationCatalog,
 } from "../types/story";
 
 interface UseStoryFiltersResult {
@@ -30,17 +32,32 @@ const INITIAL_FILTERS: StoryFilterState = {
 
 export function useStoryFilters(
   nodes: StoryNodeEvaluation[],
+  translationCatalog?: TranslationCatalog | null,
 ): UseStoryFiltersResult {
   const [filters, setFilters] = useState<StoryFilterState>(INITIAL_FILTERS);
 
+  // Make catalog loading part of the same memoized step that builds the filter
+  // option list. Without this, the first render computes
+  // `getAvailableFilterOptions` against the empty / stale module-level catalog
+  // (the App-level `useEffect` that calls loadTranslationCatalog only runs
+  // AFTER render), so the zh-dedup equivalence map collapses nothing and
+  // toggling a checkbox only matches the exact representative raw. The memo
+  // is idempotent because loadTranslationCatalog just stashes the catalog ref.
   const availableOptions = useMemo(
-    () => getAvailableFilterOptions(nodes),
-    [nodes],
+    () => {
+      loadTranslationCatalog(translationCatalog ?? null);
+      return getAvailableFilterOptions(nodes);
+    },
+    [nodes, translationCatalog],
   );
 
   const filteredNodes = useMemo(
-    () => applyStoryFilters(nodes, filters),
-    [nodes, filters],
+    () =>
+      applyStoryFilters(nodes, filters, {
+        locationEquivalents: availableOptions.locationEquivalents,
+        npcEquivalents: availableOptions.npcEquivalents,
+      }),
+    [nodes, filters, availableOptions],
   );
 
   const toggleSetValue = <T,>(

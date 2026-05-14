@@ -1,4 +1,4 @@
-import { formatStatusLabel } from "../lib/format";
+import { formatLocationZh, formatStatusLabel, formatStatusReasonZh } from "../lib/format";
 import type { StoryNodeEvaluation } from "../types/story";
 
 interface StoryNodeCardProps {
@@ -22,9 +22,9 @@ export function StoryNodeCard({
     >
       <div className="story-card__header">
         <div className="story-card__event-wrap">
-          <span className="story-card__event-id">{node.eventId ?? "Unknown"}</span>
+          <span className="story-card__event-id">{node.eventId ?? "未知事件"}</span>
           {conflictCount > 0 ? (
-            <span className="conflict-badge">Potential conflict x{conflictCount}</span>
+            <span className="conflict-badge">潜在冲突 x{conflictCount}</span>
           ) : null}
         </div>
         <span className={`status-chip status-chip--${node.status ?? "Unknown"}`}>
@@ -32,10 +32,12 @@ export function StoryNodeCard({
         </span>
       </div>
       <div className="story-card__meta">
-        <strong>{node.sourceModName ?? "Unknown mod"}</strong>
-        <span>{node.location ?? "Unknown location"}</span>
+        <strong>{node.sourceModName ?? "未知 Mod"}</strong>
+        <span title={node.location ?? undefined}>
+          {formatLocationZh(node.location, node.sourceModId)}
+        </span>
       </div>
-      <p className="story-card__reason">{node.statusReason ?? "No status reason."}</p>
+      <p className="story-card__reason">{formatStatusReasonZh(node.statusReason, node)}</p>
     </button>
   );
 }

@@ -58,6 +58,14 @@ internal static class RuntimeStoryStateRefreshServiceTests
         using var evaluatedDocument = JsonDocument.Parse(File.ReadAllText(evaluatedOutputPath));
         AssertTrue(evaluatedDocument.RootElement.TryGetProperty("statusCounts", out _), "Evaluated output should include statusCounts.");
         AssertTrue(evaluatedDocument.RootElement.TryGetProperty("nodes", out _), "Evaluated output should include nodes.");
+        AssertEqual("Hovsep", evaluatedDocument.RootElement.GetProperty("runtimeState").GetProperty("spouseName").GetString(), "Evaluated output should preserve spouseName.");
+        AssertEqual("Hovsep", evaluatedDocument.RootElement.GetProperty("runtimeState").GetProperty("marriedTo").GetString(), "Evaluated output should preserve marriedTo.");
+        AssertEqual("Sebastian", evaluatedDocument.RootElement.GetProperty("runtimeState").GetProperty("engagedTo").GetString(), "Evaluated output should preserve engagedTo.");
+        AssertEqual("Krobus", evaluatedDocument.RootElement.GetProperty("runtimeState").GetProperty("roommate").GetString(), "Evaluated output should preserve roommate.");
+        AssertTrue(
+            evaluatedDocument.RootElement.GetProperty("runtimeState").GetProperty("installedModIds").EnumerateArray().Any(item => item.GetString() == "Pathoschild.ContentPatcher"),
+            "Evaluated output should preserve installedModIds."
+        );
 
         using var exportStateDocument = JsonDocument.Parse(File.ReadAllText(exportStatePath));
         AssertEqual("fall", exportStateDocument.RootElement.GetProperty("season").GetString(), "Export state should preserve season.");
@@ -102,11 +110,19 @@ internal static class RuntimeStoryStateRefreshServiceTests
             Weather = "sunny",
             CurrentLocation = "Town",
             PlayerName = "MockFarmer",
+            InstalledModIds = new HashSet<string>(new[] { "Pathoschild.ContentPatcher" }, StringComparer.Ordinal),
             FriendshipPoints = new Dictionary<string, int>(StringComparer.Ordinal)
             {
                 ["Shane"] = 2200,
                 ["Sam"] = 1000
             },
+            SpouseName = "Hovsep",
+            Spouse = "Hovsep",
+            MarriedTo = "Hovsep",
+            Spouses = new[] { "Hovsep" },
+            EngagedTo = "Sebastian",
+            Roommate = "Krobus",
+            DatingNpcNames = new HashSet<string>(new[] { "Sam" }, StringComparer.Ordinal),
             SeenEvents = new HashSet<string>(StringComparer.Ordinal),
             Mail = new HashSet<string>(new[] { "someMail" }, StringComparer.Ordinal),
             DialogueAnswers = new HashSet<string>(new[] { "ShaneAnswerA" }, StringComparer.Ordinal)

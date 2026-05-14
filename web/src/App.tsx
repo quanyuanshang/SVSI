@@ -3,6 +3,7 @@ import { AppShell } from "./components/AppShell";
 import { ConflictPanel } from "./components/ConflictPanel";
 import { DayTimelineView } from "./components/DayTimelineView";
 import { FilterPanel } from "./components/FilterPanel";
+import { LocationTranslationDebugPanel } from "./components/LocationTranslationDebugPanel";
 import { ProgressTimelineView } from "./components/ProgressTimelineView";
 import { RuntimeHeader } from "./components/RuntimeHeader";
 import { StoryNodeDetail } from "./components/StoryNodeDetail";
@@ -37,6 +38,11 @@ export default function App() {
     () => enrichHistoryEntries(history?.entries ?? [], nodes),
     [history?.entries, nodes],
   );
+  // useStoryFilters owns translation-catalog loading so the zh-dedup of the
+  // filter option list always runs against the most recent catalog (instead of
+  // racing with App-level useEffect, which previously left the equivalence map
+  // collapsed to "every raw is its own group" on first render and broke
+  // location / NPC filtering on initial paint).
   const {
     filters,
     filteredNodes,
@@ -47,7 +53,7 @@ export default function App() {
     toggleModName,
     toggleLocation,
     toggleNpcName,
-  } = useStoryFilters(nodes);
+  } = useStoryFilters(nodes, data?.translationCatalog);
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId) {
@@ -82,6 +88,16 @@ export default function App() {
 
   const nodesById = useMemo(() => {
     return buildHistoryNodeMap(nodes);
+  }, [nodes]);
+
+  const availableEventIds = useMemo<ReadonlySet<string>>(() => {
+    const set = new Set<string>();
+    for (const node of nodes) {
+      if (node.eventId) {
+        set.add(node.eventId);
+      }
+    }
+    return set;
   }, [nodes]);
 
   const selectedHistoryEntries = useMemo(
@@ -126,7 +142,7 @@ export default function App() {
   if (loading && !hasData) {
     return (
       <main className="page-shell page-shell--centered">
-        <p className="empty-state">Loading...</p>
+        <p className="empty-state">加载中...</p>
       </main>
     );
   }
@@ -167,7 +183,7 @@ export default function App() {
                 aria-selected={activeTab === "today"}
                 type="button"
               >
-                Today
+                今日事件
               </button>
               <button
                 className={`timeline-item__tag${activeTab === "progress" ? " timeline-item--selected" : ""}`}
@@ -176,13 +192,14 @@ export default function App() {
                 aria-selected={activeTab === "progress"}
                 type="button"
               >
-                Progress
+                事件历史
               </button>
             </div>
           </div>
 
           {activeTab === "today" ? (
             <>
+              <LocationTranslationDebugPanel translationCatalog={data?.translationCatalog} />
               <ConflictPanel
                 conflicts={potentialConflicts}
                 nodesById={nodesById}
@@ -212,6 +229,8 @@ export default function App() {
         <StoryNodeDetail
           node={selectedNode}
           historyEntries={selectedHistoryEntries}
+          runtimeState={data?.runtimeState}
+          availableEventIds={availableEventIds}
         />
       }
     />

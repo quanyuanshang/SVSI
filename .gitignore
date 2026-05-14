@@ -6,4 +6,6 @@ smapi-mod-tests/artifacts/bin/
 smapi-mod-tests/artifacts/obj/Debug/
 web/node_modules/
 web/dist/
+web/.env.local
+web/.env.*.local
 StardewStoryInspector/export/
