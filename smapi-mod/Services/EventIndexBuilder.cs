@@ -63,6 +63,7 @@ public sealed class EventIndexBuilder
 
         var rootSourcePath = mod.ContentJsonPath ?? Path.Combine(mod.DirectoryPath, "content.json");
         var visitedSourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var dynamicTokens = this.ReadDynamicTokenDefinitionsFromContentTree(contentJsonObject, rootSourcePath);
 
         foreach (var changeContext in this.EnumerateChanges(contentJsonObject, rootSourcePath, visitedSourcePaths))
         {
@@ -75,7 +76,7 @@ public sealed class EventIndexBuilder
             var action = this.ReadString(changeContext.Change, "Action");
             if (string.Equals(action, "EditData", StringComparison.OrdinalIgnoreCase))
             {
-                foreach (var node in this.BuildEditDataNodes(mod, changeContext, assetTarget))
+                foreach (var node in this.BuildEditDataNodes(mod, changeContext, assetTarget, dynamicTokens))
                 {
                     yield return node;
                 }
@@ -85,7 +86,7 @@ public sealed class EventIndexBuilder
 
             if (string.Equals(action, "Load", StringComparison.OrdinalIgnoreCase))
             {
-                foreach (var node in this.BuildLoadNodes(mod, changeContext, assetTarget))
+                foreach (var node in this.BuildLoadNodes(mod, changeContext, assetTarget, dynamicTokens))
                 {
                     yield return node;
                 }
@@ -96,7 +97,8 @@ public sealed class EventIndexBuilder
     private IEnumerable<StoryNode> BuildEditDataNodes(
         ScannedMod mod,
         ChangeContext changeContext,
-        string assetTarget)
+        string assetTarget,
+        Dictionary<string, List<DynamicTokenDefinition>> dynamicTokens)
     {
         var change = changeContext.Change;
         if (change["Entries"] is not JsonObject entries)
@@ -125,7 +127,9 @@ public sealed class EventIndexBuilder
                 assetTarget,
                 rawKey,
                 rawScript,
+                dynamicTokens,
                 ReadPatchWhenConditions(change),
+                branchTargets,
                 new List<EvidenceRef>
                 {
                     new EvidenceRef
@@ -142,7 +146,8 @@ public sealed class EventIndexBuilder
     private IEnumerable<StoryNode> BuildLoadNodes(
         ScannedMod mod,
         ChangeContext changeContext,
-        string assetTarget)
+        string assetTarget,
+        Dictionary<string, List<DynamicTokenDefinition>> dynamicTokens)
     {
         var change = changeContext.Change;
         var fromFile = this.ReadString(change, "FromFile");
@@ -193,7 +198,9 @@ public sealed class EventIndexBuilder
                 assetTarget,
                 rawKey,
                 rawScript,
+                dynamicTokens,
                 ReadPatchWhenConditions(change),
+                branchTargets,
                 new List<EvidenceRef>
                 {
                     new EvidenceRef
@@ -333,18 +340,25 @@ public sealed class EventIndexBuilder
         string assetTarget,
         string rawKey,
         string rawScript,
+        Dictionary<string, List<DynamicTokenDefinition>> dynamicTokens,
         List<PatchWhenCondition> patchWhenConditions,
+        HashSet<string> branchTargets,
         List<EvidenceRef> evidenceRefs)
     {
         var location = ExtractLocation(assetTarget);
         var keySplit = this.eventKeySplitter.Split(rawKey);
-        var parsedConditions = this.eventPreconditionParser.Parse(keySplit.PreconditionFragments);
+        var parsedConditions = this.ParsePreconditions(keySplit.PreconditionFragments, dynamicTokens);
         var fingerprint = $"{mod.UniqueID}|{assetTarget}|{rawKey}|{string.Join("|", evidenceRefs.Select(refItem => refItem.SourcePath + "::" + refItem.JsonPath))}";
 
         return new StoryNode
         {
             NodeId = $"story-node:{ComputeShortHash(fingerprint)}",
             EventId = keySplit.EventId,
+            EventKind = DetermineEventKind(
+                keySplit.EventId,
+                keySplit.PreconditionFragments,
+                rawScript,
+                branchTargets.Contains(keySplit.EventId)),
             SourceModId = mod.UniqueID,
             SourceModName = mod.Name,
             AssetTarget = assetTarget,
@@ -355,8 +369,111 @@ public sealed class EventIndexBuilder
             ConditionAst = parsedConditions.ConditionAst,
             UnknownFragments = parsedConditions.UnknownFragments,
             RawScriptPreview = BuildPreview(rawScript),
-            EvidenceRefs = evidenceRefs
+            EvidenceRefs = evidenceRefs,
+            SourceModConfigValues = mod.ConfigValues,
+            SourceModDynamicTokens = dynamicTokens.ToDictionary(
+                entry => entry.Key,
+                entry => entry.Value.ToList(),
+                StringComparer.OrdinalIgnoreCase)
         };
+    }
+
+    private EventPreconditionParseResult ParsePreconditions(
+        IReadOnlyList<string> rawPreconditionFragments,
+        Dictionary<string, List<DynamicTokenDefinition>> dynamicTokens)
+    {
+        var children = new List<ConditionAstNode>();
+        var unknownFragments = new List<string>();
+
+        foreach (var rawFragment in rawPreconditionFragments)
+        {
+            if (TryExpandDynamicTokenFragment(rawFragment, dynamicTokens, out var expandedNode))
+            {
+                children.Add(expandedNode);
+                continue;
+            }
+
+            var parsed = this.eventPreconditionParser.Parse(new[] { rawFragment });
+            children.AddRange(parsed.ConditionAst.Children);
+            unknownFragments.AddRange(parsed.UnknownFragments);
+        }
+
+        return new EventPreconditionParseResult
+        {
+            ConditionAst = new ConditionAstNode
+            {
+                Type = "AllOf",
+                Children = children
+            },
+            UnknownFragments = unknownFragments
+        };
+    }
+
+    private bool TryExpandDynamicTokenFragment(
+        string rawFragment,
+        Dictionary<string, List<DynamicTokenDefinition>> dynamicTokens,
+        out ConditionAstNode expandedNode)
+    {
+        expandedNode = new ConditionAstNode
+        {
+            Type = "Unknown",
+            Raw = rawFragment
+        };
+
+        var match = Regex.Match(rawFragment.Trim(), @"^\{\{([A-Za-z0-9_]+)\}\}$");
+        if (!match.Success)
+        {
+            return false;
+        }
+
+        var tokenName = match.Groups[1].Value;
+        if (!dynamicTokens.TryGetValue(tokenName, out var definitions) || definitions.Count == 0)
+        {
+            return false;
+        }
+
+        var alternatives = new List<ConditionAstNode>();
+        foreach (var definition in definitions)
+        {
+            var alternativeChildren = new List<ConditionAstNode>();
+
+            foreach (var whenFragment in definition.WhenFragments)
+            {
+                var parsedWhen = this.eventPreconditionParser.Parse(new[] { whenFragment });
+                alternativeChildren.AddRange(parsedWhen.ConditionAst.Children);
+            }
+
+            var valueFragments = this.eventKeySplitter.Split($"0/{definition.Value}").PreconditionFragments;
+            foreach (var valueFragment in valueFragments)
+            {
+                var parsedValue = this.eventPreconditionParser.Parse(new[] { valueFragment });
+                alternativeChildren.AddRange(parsedValue.ConditionAst.Children);
+            }
+
+            alternatives.Add(alternativeChildren.Count switch
+            {
+                0 => new ConditionAstNode
+                {
+                    Type = "Unknown",
+                    Raw = rawFragment
+                },
+                1 => alternativeChildren[0],
+                _ => new ConditionAstNode
+                {
+                    Type = "AllOf",
+                    Children = alternativeChildren
+                }
+            });
+        }
+
+        expandedNode = alternatives.Count == 1
+            ? alternatives[0]
+            : new ConditionAstNode
+            {
+                Type = "AnyOf",
+                Children = alternatives
+            };
+        return true;
     }
 
     private string ReadString(JsonObject source, string propertyName)
@@ -412,6 +529,187 @@ public sealed class EventIndexBuilder
         }
 
         return value.ToJsonString();
+    }
+
+    private Dictionary<string, List<DynamicTokenDefinition>> ReadDynamicTokenDefinitionsFromContentTree(
+        JsonObject root,
+        string sourcePath)
+    {
+        var definitionsByName = ReadDynamicTokenDefinitions(root, sourcePath);
+        var visitedSourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { sourcePath };
+        foreach (var includedPath in this.EnumerateIncludedContentFiles(root, sourcePath, visitedSourcePaths))
+        {
+            JsonObject? includedRoot;
+            try
+            {
+                includedRoot = LooseJsonParser.ParseNodeFromFile(includedPath) as JsonObject;
+            }
+            catch
+            {
+                continue;
+            }
+
+            if (includedRoot is null)
+            {
+                continue;
+            }
+
+            MergeDynamicTokenDefinitions(definitionsByName, ReadDynamicTokenDefinitions(includedRoot, includedPath));
+        }
+
+        return definitionsByName;
+    }
+
+    private IEnumerable<string> EnumerateIncludedContentFiles(
+        JsonObject root,
+        string sourcePath,
+        ISet<string> visitedSourcePaths)
+    {
+        if (root["Changes"] is not JsonArray changes)
+        {
+            yield break;
+        }
+
+        foreach (var changeNode in changes)
+        {
+            if (changeNode is not JsonObject change
+                || !string.Equals(this.ReadString(change, "Action"), "Include", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            foreach (var includedPath in this.ReadIncludedFilePaths(change, sourcePath))
+            {
+                if (!visitedSourcePaths.Add(includedPath))
+                {
+                    continue;
+                }
+
+                yield return includedPath;
+
+                JsonObject? includedRoot;
+                try
+                {
+                    includedRoot = LooseJsonParser.ParseNodeFromFile(includedPath) as JsonObject;
+                }
+                catch
+                {
+                    continue;
+                }
+
+                if (includedRoot is null)
+                {
+                    continue;
+                }
+
+                foreach (var nestedIncludedPath in this.EnumerateIncludedContentFiles(
+                    includedRoot,
+                    includedPath,
+                    visitedSourcePaths))
+                {
+                    yield return nestedIncludedPath;
+                }
+            }
+        }
+    }
+
+    private static void MergeDynamicTokenDefinitions(
+        Dictionary<string, List<DynamicTokenDefinition>> destination,
+        Dictionary<string, List<DynamicTokenDefinition>> source)
+    {
+        foreach (var pair in source)
+        {
+            if (!destination.TryGetValue(pair.Key, out var definitions))
+            {
+                definitions = new List<DynamicTokenDefinition>();
+                destination[pair.Key] = definitions;
+            }
+
+            definitions.AddRange(pair.Value);
+        }
+    }
+
+    private static Dictionary<string, List<DynamicTokenDefinition>> ReadDynamicTokenDefinitions(
+        JsonObject root,
+        string sourcePath)
+    {
+        var definitionsByName = new Dictionary<string, List<DynamicTokenDefinition>>(StringComparer.Ordinal);
+        if (root["DynamicTokens"] is not JsonArray dynamicTokensArray)
+        {
+            return definitionsByName;
+        }
+
+        foreach (var tokenNode in dynamicTokensArray)
+        {
+            if (tokenNode is not JsonObject tokenObject)
+            {
+                continue;
+            }
+
+            var name = ReadConditionValue(tokenObject["Name"])?.Trim();
+            var value = ReadConditionValue(tokenObject["Value"])?.Trim();
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            if (!definitionsByName.TryGetValue(name, out var definitions))
+            {
+                definitions = new List<DynamicTokenDefinition>();
+                definitionsByName[name] = definitions;
+            }
+
+            ReadDynamicTokenWhen(
+                tokenObject["When"] as JsonObject,
+                out var whenConditions,
+                out var whenFragments);
+            definitions.Add(new DynamicTokenDefinition
+            {
+                Name = name,
+                Value = value,
+                WhenConditions = whenConditions,
+                WhenFragments = whenFragments,
+                SourceFile = sourcePath
+            });
+        }
+
+        return definitionsByName;
+    }
+
+    private static void ReadDynamicTokenWhen(
+        JsonObject? whenObject,
+        out List<PatchWhenCondition> whenConditions,
+        out List<string> whenFragments)
+    {
+        whenConditions = new List<PatchWhenCondition>();
+        whenFragments = new List<string>();
+        if (whenObject is null)
+        {
+            return;
+        }
+
+        foreach (var condition in whenObject)
+        {
+            var value = ReadConditionValue(condition.Value);
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                continue;
+            }
+
+            whenConditions.Add(new PatchWhenCondition
+            {
+                Key = condition.Key,
+                Value = value,
+                RawValue = condition.Value?.ToJsonString() ?? string.Empty,
+                IsKnown = false,
+                Reason = "DynamicToken guard condition pending evaluation."
+            });
+
+            if (string.Equals(condition.Key, "Season", StringComparison.OrdinalIgnoreCase))
+            {
+                whenFragments.Add($"Season {value}");
+            }
+        }
     }
 
     private static HashSet<string> ReadBranchTargets(JsonObject entries)
@@ -504,5 +802,79 @@ public sealed class EventIndexBuilder
     private static string EscapeForJsonPath(string value)
     {
         return value.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal);
+    }
+
+    private static StoryNodeEventKind DetermineEventKind(
+        string eventId,
+        IReadOnlyList<string> rawPreconditions,
+        string rawScript,
+        bool isIndexedBranchTarget)
+    {
+        if (isIndexedBranchTarget)
+        {
+            return StoryNodeEventKind.BranchTarget;
+        }
+
+        if (IsNumericEventId(eventId))
+        {
+            return StoryNodeEventKind.RegularLocationEvent;
+        }
+
+        if (IsSpecialGameEventId(eventId))
+        {
+            return StoryNodeEventKind.SpecialGameEvent;
+        }
+
+        if (IsBranchLikeEventId(eventId))
+        {
+            return StoryNodeEventKind.BranchTarget;
+        }
+
+        if (rawPreconditions.Count > 0)
+        {
+            return StoryNodeEventKind.RegularLocationEvent;
+        }
+
+        if (string.IsNullOrWhiteSpace(rawScript) || rawScript.Trim().Length < 8)
+        {
+            return StoryNodeEventKind.DialogueOnly;
+        }
+
+        return StoryNodeEventKind.BranchTarget;
+    }
+
+    private static bool IsNumericEventId(string eventId)
+    {
+        if (string.IsNullOrWhiteSpace(eventId))
+        {
+            return false;
+        }
+
+        foreach (var character in eventId)
+        {
+            if (!char.IsDigit(character))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsBranchLikeEventId(string eventId)
+    {
+        return string.Equals(eventId, "end", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(eventId, "continue", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(eventId, "healer", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(eventId, "stop", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(eventId, "abort", StringComparison.OrdinalIgnoreCase)
+            || eventId.StartsWith("date", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsSpecialGameEventId(string eventId)
+    {
+        return string.Equals(eventId, "PlayerKilled", StringComparison.OrdinalIgnoreCase)
+            || eventId.StartsWith("MaggHealer", StringComparison.OrdinalIgnoreCase)
+            || eventId.StartsWith("MaggMage", StringComparison.OrdinalIgnoreCase);
     }
 }

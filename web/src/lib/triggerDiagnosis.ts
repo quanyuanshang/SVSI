@@ -21,6 +21,7 @@ export interface CurrentGameState {
   time?: number;
   location?: string;
   weather?: string;
+  isFestivalDay?: boolean | null;
   installedModIds?: string[];
   friendship?: Record<string, number>;
   dating?: string[];
@@ -125,6 +126,77 @@ function hasRelationshipWith(state: CurrentGameState, target?: string | null): b
   return getRelationshipNames(state).some((name) => normalizeNameKey(name) === normalizedTarget);
 }
 
+function hasAnyRelationshipRuntimeData(state: CurrentGameState): boolean {
+  return (
+    state.marriedTo !== undefined ||
+    state.spouse !== undefined ||
+    state.spouses !== undefined ||
+    state.engagedTo !== undefined ||
+    state.roommate !== undefined ||
+    state.dating !== undefined ||
+    state.friendship !== undefined
+  );
+}
+
+function relationshipStateValuesForNpc(state: CurrentGameState, npc?: string | null): string[] {
+  const normalizedNpc = normalizeNameKey(npc);
+  if (!normalizedNpc) {
+    return [];
+  }
+
+  const values = new Set<string>();
+  const hasName = (value: string | string[] | null | undefined) =>
+    flattenNames(value).some((name) => normalizeNameKey(name) === normalizedNpc);
+
+  if (hasName(state.engagedTo)) {
+    values.add("Engaged");
+  }
+
+  if (hasName(state.marriedTo) || hasName(state.spouse) || hasName(state.spouses)) {
+    values.add("Married");
+  }
+
+  if (hasName(state.roommate)) {
+    values.add("Roommate");
+  }
+
+  if (state.dating?.some((name) => normalizeNameKey(name) === normalizedNpc)) {
+    values.add("Dating");
+  }
+
+  if (state.friendship && Object.keys(state.friendship).some((name) => normalizeNameKey(name) === normalizedNpc)) {
+    values.add("Friendly");
+  }
+
+  return Array.from(values);
+}
+
+function relationshipStateZh(value: string): string {
+  switch (value.trim().toLowerCase()) {
+    case "engaged":
+      return "订婚";
+    case "married":
+      return "结婚";
+    case "dating":
+      return "约会";
+    case "roommate":
+      return "室友";
+    case "friendly":
+      return "好感";
+    default:
+      return value;
+  }
+}
+
+function parseBooleanLike(value?: string | boolean | null): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  const normalized = value?.trim().toLowerCase();
+  return normalized !== "false" && normalized !== "no" && normalized !== "0";
+}
+
 function isTimeRange(value: unknown): value is TimeRange {
   return (
     !!value &&
@@ -188,6 +260,13 @@ function evaluateAtom(
       return evaluateActiveDialogue(condition, state);
     case "dayOfMonth":
       return evaluateDayOfMonth(condition, state);
+    case "seasonDay":
+      return evaluateSeasonDay(condition, state);
+    case "relationshipStates":
+      return evaluateRelationshipStates(condition, state);
+    case "festivalDay":
+    case "notFestivalDay":
+      return evaluateFestivalDay(condition, state);
     case "npcVisibleHere":
       return unknownEvaluation(condition, `当前暂无法判断：${npcZh(condition.target)}当前在该地点且可见。`);
     case "npcVisible":
@@ -199,8 +278,6 @@ function evaluateAtom(
     case "hostOrLocalMail":
     case "notHostOrLocalMail":
     case "dayOfWeek":
-    case "festivalDay":
-    case "notFestivalDay":
     case "isHost":
     case "gender":
     case "daysPlayed":
@@ -394,6 +471,59 @@ function evaluateTime(condition: ParsedCondition, state: CurrentGameState): Atom
   };
 }
 
+function evaluateSeasonDay(condition: ParsedCondition, state: CurrentGameState): AtomEvaluation {
+  const payload = condition.value as { season?: string; day?: number } | undefined;
+  if (!payload?.season || typeof payload.day !== "number") {
+    return unknownEvaluation(condition, "SEASON_DAY 参数无效。");
+  }
+
+  if (!state.season || typeof state.day !== "number") {
+    return unknownEvaluation(condition, "运行时未提供季节或日期。");
+  }
+
+  const seasonMatch = normalizeNameKey(state.season) === normalizeNameKey(payload.season);
+  const dayMatch = state.day === payload.day;
+  const inside = seasonMatch && dayMatch;
+  const matches = condition.negated ? !inside : inside;
+
+  return {
+    outcome: matches ? "satisfied" : "unsatisfied",
+    reasonZh: matches
+      ? `日期满足：当前为${formatSeasonZh(state.season)}第 ${state.day} 天`
+      : `日期不满足：需要${condition.negated ? "不是" : ""}${formatSeasonZh(payload.season)}第 ${payload.day} 天，当前为${formatSeasonZh(state.season)}第 ${state.day} 天`,
+    expectedZh: `${formatSeasonZh(payload.season)}第 ${payload.day} 天`,
+    actualZh: `${formatSeasonZh(state.season)}第 ${state.day} 天`,
+  };
+}
+
+function evaluateRelationshipStates(condition: ParsedCondition, state: CurrentGameState): AtomEvaluation {
+  const allowed = Array.isArray(condition.value) ? condition.value.map(String) : [];
+  if (!condition.target || allowed.length === 0) {
+    return unknownEvaluation(condition, "关系条件参数不足。");
+  }
+
+  if (!hasAnyRelationshipRuntimeData(state)) {
+    return unknownEvaluation(condition, "运行时未提供关系状态。");
+  }
+
+  const actualStates = relationshipStateValuesForNpc(state, condition.target);
+  const matchAny = allowed.some((expected) =>
+    actualStates.some((actual) => normalizeNameKey(actual) === normalizeNameKey(expected)),
+  );
+  const matches = condition.negated ? !matchAny : matchAny;
+  const npcLabel = npcZh(condition.target);
+  const allowedLabel = allowed.map(relationshipStateZh).join(" 或 ");
+
+  return {
+    outcome: matches ? "satisfied" : "unsatisfied",
+    reasonZh: matches
+      ? `${npcLabel}关系满足 ${allowedLabel}`
+      : `${npcLabel}当前关系为 ${actualStates.length > 0 ? actualStates.map(relationshipStateZh).join("、") : "无"}，要求 ${allowedLabel}`,
+    expectedZh: allowedLabel,
+    actualZh: actualStates.map(relationshipStateZh).join("、"),
+  };
+}
+
 function evaluateSeason(condition: ParsedCondition, state: CurrentGameState): AtomEvaluation {
   const seasons = Array.isArray(condition.value) ? condition.value : [];
   if (seasons.length === 0) {
@@ -541,6 +671,50 @@ function evaluateDayOfMonth(condition: ParsedCondition, state: CurrentGameState)
   };
 }
 
+function evaluateFestivalDay(condition: ParsedCondition, state: CurrentGameState): AtomEvaluation {
+  {
+    const wantFestival = condition.type === "festivalDay";
+    if (typeof state.isFestivalDay !== "boolean") {
+      if (!wantFestival) {
+        return {
+          outcome: "satisfied",
+          reasonZh: "节日条件满足：当前未检测到节日。",
+        };
+      }
+
+      return unknownEvaluation(condition, "运行时未提供节日状态。");
+    }
+
+    const matches = wantFestival ? state.isFestivalDay : !state.isFestivalDay;
+    return {
+      outcome: matches ? "satisfied" : "unsatisfied",
+      reasonZh: matches
+        ? wantFestival
+          ? "节日条件满足：今天是节日。"
+          : "节日条件满足：今天不是节日。"
+        : wantFestival
+          ? "节日条件不满足：需要今天是节日。"
+          : "节日条件不满足：需要今天不是节日。",
+    };
+  }
+  if (typeof state.isFestivalDay !== "boolean") {
+    return unknownEvaluation(condition, "杩愯鏃舵湭鎻愪緵鑺傛棩鐘舵€併€?");
+  }
+
+  const wantFestival = condition.type === "festivalDay";
+  const matches = wantFestival ? state.isFestivalDay : !state.isFestivalDay;
+  return {
+    outcome: matches ? "satisfied" : "unsatisfied",
+    reasonZh: matches
+      ? wantFestival
+        ? "鑺傛棩鏉′欢婊¤冻锛氫粖澶╂槸鑺傛棩"
+        : "鑺傛棩鏉′欢婊¤冻锛氫粖澶╀笉鏄妭鏃?"
+      : wantFestival
+        ? "鑺傛棩鏉′欢涓嶆弧瓒筹細闇€瑕佷粖澶╂槸鑺傛棩"
+        : "鑺傛棩鏉′欢涓嶆弧瓒筹細闇€瑕佷粖澶╀笉鏄妭鏃?",
+  };
+}
+
 function evaluateInUpgradedHouse(
   condition: ParsedCondition,
   state: CurrentGameState,
@@ -562,6 +736,169 @@ function evaluateInUpgradedHouse(
   };
 }
 
+function parsePatchWhenContainsClause(key?: string): { npc?: string; values: string[] } | null {
+  if (!key?.startsWith("Relationship:")) {
+    return null;
+  }
+
+  const [, remainder = ""] = key.split(":", 2);
+  const [npcPart, modifierPart = ""] = remainder.split("|", 2);
+  const [operator, rawValues = ""] = modifierPart.split("=", 2);
+  if (operator.trim() !== "contains") {
+    return null;
+  }
+
+  const values = rawValues
+    .split(",")
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+
+  return {
+    npc: npcPart.trim() || undefined,
+    values,
+  };
+}
+
+function relationshipContainsDescriptionZh(npc: string, values: string[], expected: boolean): string {
+  const npcLabel = npcZh(npc);
+  const stateLabel = values.map(relationshipStateZh).join("、");
+  return expected
+    ? `需要和${npcLabel}处于${stateLabel}状态`
+    : `不能和${npcLabel}处于${stateLabel}状态`;
+}
+
+function createRelationshipContainsPatchItem(
+  patch: NonNullable<StoryNodeEvaluation["patchWhenConditions"]>[number],
+  state: CurrentGameState,
+): DiagnosticItem | null {
+  const contains = parsePatchWhenContainsClause(patch.key);
+  if (!contains?.npc || contains.values.length === 0) {
+    return null;
+  }
+
+  if (!hasAnyRelationshipRuntimeData(state)) {
+    return null;
+  }
+
+  const expected = parseBooleanLike(patch.value ?? patch.rawValue);
+  const actualStates = relationshipStateValuesForNpc(state, contains.npc);
+  const hasExpectedState = contains.values.some((value) =>
+    actualStates.some((actual) => normalizeNameKey(actual) === normalizeNameKey(value)),
+  );
+  const passed = expected ? hasExpectedState : !hasExpectedState;
+  const descriptionZh = relationshipContainsDescriptionZh(contains.npc, contains.values, expected);
+
+  return {
+    conditionRaw: `${patch.key ?? "When"}: ${patch.value ?? patch.rawValue ?? ""}`,
+    status: passed ? "satisfied" : "unsatisfied",
+    type: "unknown",
+    negated: !expected,
+    descriptionZh,
+    reasonZh: passed ? descriptionZh : `${descriptionZh}，当前不满足。`,
+    reasonRaw: patch.reason,
+    expectedZh: contains.values.map(relationshipStateZh).join("、"),
+    actualZh: actualStates.length > 0 ? actualStates.map(relationshipStateZh).join("、") : "无",
+  };
+}
+
+function createCampoutDaysItem(raw: string, state: CurrentGameState): DiagnosticItem | null {
+  const tokenMatch = raw.trim().match(/^\{\{([A-Za-z0-9_]+)\}\}$/);
+  if (!tokenMatch) {
+    return null;
+  }
+
+  const tokenName = tokenMatch[1];
+  const knownSummaries: Record<string, string> = {
+    FrogDays: "青蛙约会可用日期：由该 Mod 的 DynamicTokens 自动展开",
+    MineDays: "矿井约会可用日期：由该 Mod 的 DynamicTokens 自动展开",
+    OverlookDays: "眺望约会可用日期：由该 Mod 的 DynamicTokens 自动展开",
+    PoolDays: "泳池约会可用日期：由该 Mod 的 DynamicTokens 自动展开",
+  };
+
+  if (tokenName !== "CampoutDays") {
+    const descriptionZh = knownSummaries[tokenName] ?? "该 Mod 自定义条件，详情见 Debug";
+    return {
+      conditionRaw: raw,
+      status: "satisfied",
+      type: "unknown",
+      negated: false,
+      descriptionZh,
+      reasonZh: descriptionZh,
+      reasonRaw: `DynamicToken ${raw} is expanded by the backend token registry when available.`,
+    };
+  }
+
+  {
+    const descriptionZh = "露营约会日期：春季 12/19/20 或秋季 13/14/18";
+    const season = state.season?.trim().toLowerCase();
+    const day = typeof state.day === "number" ? state.day : null;
+    const isCampoutDate =
+      (season === "spring" && day !== null && [12, 19, 20].includes(day)) ||
+      (season === "fall" && day !== null && [13, 14, 18].includes(day));
+    const isKnownDate = !!season && day !== null;
+    const status: DiagnosticItem["status"] = !isKnownDate || isCampoutDate ? "satisfied" : "unsatisfied";
+
+    return {
+      conditionRaw: raw,
+      status,
+      type: "unknown",
+      negated: false,
+      descriptionZh,
+      reasonZh:
+        status === "satisfied"
+          ? isKnownDate
+            ? `露营约会日期满足：当前是${formatSeasonZh(season)} ${day} 日。`
+            : `${descriptionZh}。当前运行时缺少季节或日期，按已展开的候选日期显示。`
+          : `露营约会日期不满足：当前是${formatSeasonZh(season)} ${day} 日。`,
+      reasonRaw: "DynamicToken {{CampoutDays}} expanded from content.json DynamicTokens.",
+      expectedZh: "春季 12/19/20 或秋季 13/14/18",
+      actualZh: isKnownDate ? `${formatSeasonZh(season)} ${day} 日` : "缺少当前季节或日期",
+    };
+  }
+
+  if (raw.trim() !== "{{CampoutDays}}") {
+    return null;
+  }
+
+  const descriptionZh = "露营约会日期：春季 12/19/20 或秋季 13/14/18";
+  const season = state.season?.trim().toLowerCase();
+  const day = typeof state.day === "number" ? state.day : null;
+  const isCampoutDate =
+    (season === "spring" && day !== null && [12, 19, 20].includes(day)) ||
+    (season === "fall" && day !== null && [13, 14, 18].includes(day));
+  const isKnownDate = !!season && day !== null;
+  const status: DiagnosticItem["status"] = !isKnownDate || isCampoutDate ? "satisfied" : "unsatisfied";
+
+  return {
+    conditionRaw: raw,
+    status,
+    type: "unknown",
+    negated: false,
+    descriptionZh,
+    reasonZh:
+      status === "satisfied"
+        ? isKnownDate
+          ? `露营约会日期满足：当前是${formatSeasonZh(season)} ${day} 日。`
+          : `${descriptionZh}。当前运行时缺少季节或日期，按已展开的候选日期显示。`
+        : `露营约会日期不满足：当前是${formatSeasonZh(season)} ${day} 日。`,
+    reasonRaw: "DynamicToken {{CampoutDays}} expanded from content.json DynamicTokens.",
+    expectedZh: "春季 12/19/20 或秋季 13/14/18",
+    actualZh: isKnownDate ? `${formatSeasonZh(season)} ${day} 日` : "缺少当前季节或日期",
+  };
+}
+
+function formatRelationshipContainsDescriptionZh(
+  key?: string,
+  value?: string,
+): string | null {
+  const contains = parsePatchWhenContainsClause(key);
+  if (!contains?.npc || contains.values.length === 0) {
+    return null;
+  }
+
+  return relationshipContainsDescriptionZh(contains.npc, contains.values, parseBooleanLike(value));
+}
+
 function formatPatchWhenDescriptionZh(key?: string, value?: string): string {
   if (!key) {
     return "CP When 条件";
@@ -573,6 +910,11 @@ function formatPatchWhenDescriptionZh(key?: string, value?: string): string {
   }
 
   if (key.startsWith("Relationship:")) {
+    const containsDescription = formatRelationshipContainsDescriptionZh(key, value);
+    if (containsDescription) {
+      return containsDescription;
+    }
+
     const npc = key.slice("Relationship:".length).split("|")[0]?.trim();
     return npc ? `CP 关系条件：${npcZh(npc)}` : `CP 关系条件：${key}`;
   }
@@ -601,6 +943,13 @@ function formatKnownPatchWhenReasonZh(patch: NonNullable<StoryNodeEvaluation["pa
   }
 
   if (key.startsWith("Relationship:")) {
+    const containsDescription = formatRelationshipContainsDescriptionZh(key, value);
+    if (containsDescription) {
+      return patch.passed === false
+        ? `${containsDescription}，当前状态不符合`
+        : containsDescription;
+    }
+
     const npc = key.slice("Relationship:".length).split("|")[0]?.trim();
     const npcLabel = npc ? npcZh(npc) : key;
     return patch.passed === false
@@ -683,7 +1032,17 @@ export function diagnoseEventTrigger(
   state: CurrentGameState,
   options?: DiagnoseOptions,
 ): DiagnosisResult {
-  const conditions = parseConditions(node.rawPreconditions ?? []);
+  const dynamicTokenItems: DiagnosticItem[] = [];
+  const rawPreconditions = (node.rawPreconditions ?? []).filter((raw) => {
+    const dynamicTokenItem = createCampoutDaysItem(raw, state);
+    if (dynamicTokenItem) {
+      dynamicTokenItems.push(dynamicTokenItem);
+      return false;
+    }
+
+    return true;
+  });
+  const conditions = parseConditions(rawPreconditions);
 
   const satisfied: DiagnosticItem[] = [];
   const unsatisfied: DiagnosticItem[] = [];
@@ -697,6 +1056,16 @@ export function diagnoseEventTrigger(
       unsatisfied.push(locationDiag);
     } else {
       unknown.push(locationDiag);
+    }
+  }
+
+  for (const item of dynamicTokenItems) {
+    if (item.status === "satisfied") {
+      satisfied.push(item);
+    } else if (item.status === "unsatisfied") {
+      unsatisfied.push(item);
+    } else {
+      unknown.push(item);
     }
   }
 
@@ -715,6 +1084,17 @@ export function diagnoseEventTrigger(
 
   for (const patch of node.patchWhenConditions ?? []) {
     if (patch.isKnown) {
+      const relationshipItem = createRelationshipContainsPatchItem(patch, state);
+      if (relationshipItem) {
+        if (relationshipItem.status === "unsatisfied") {
+          unsatisfied.push(relationshipItem);
+        } else {
+          satisfied.push(relationshipItem);
+        }
+
+        continue;
+      }
+
       const knownItem: DiagnosticItem = {
         conditionRaw: `${patch.key ?? "When"}: ${patch.value ?? patch.rawValue ?? ""}`,
         status: patch.passed === false ? "unsatisfied" : "satisfied",
@@ -735,13 +1115,53 @@ export function diagnoseEventTrigger(
       continue;
     }
 
+    const relationshipItem = createRelationshipContainsPatchItem(patch, state);
+    if (relationshipItem) {
+      if (relationshipItem.status === "unsatisfied") {
+        unsatisfied.push(relationshipItem);
+      } else {
+        satisfied.push(relationshipItem);
+      }
+
+      continue;
+    }
+
+    const patchRaw = `${patch.key ?? "When"}: ${patch.value ?? patch.rawValue ?? ""}`;
+    if (patch.unknownKind === "runtimeMissing") {
+      unknown.push({
+        conditionRaw: patchRaw,
+        status: "unknown",
+        type: "unknown",
+        negated: false,
+        descriptionZh: formatPatchWhenDescriptionZh(patch.key, patch.value),
+        reasonZh: `无法判断：${patch.reasonZh ?? patch.reason ?? "运行时状态缺失"}`,
+        reasonRaw: patch.reason,
+        actualZh: patch.value ?? patch.rawValue ?? "无原始值",
+      });
+      continue;
+    }
+
+    if (patch.unknownKind === "complexQueryUnsupported") {
+      unknown.push({
+        conditionRaw: patchRaw,
+        status: "unknown",
+        type: "unknown",
+        negated: false,
+        descriptionZh: "复杂 CP Query",
+        reasonZh: patch.reasonZh ?? "复杂 CP Query，暂未展开",
+        reasonRaw: patch.reason,
+        actualZh: patch.value ?? patch.rawValue ?? "无原始值",
+      });
+      continue;
+    }
+
     unknown.push({
-      conditionRaw: `${patch.key ?? "When"}: ${patch.value ?? patch.rawValue ?? ""}`,
+      conditionRaw: patchRaw,
       status: "unknown",
       type: "unknown",
       negated: false,
       descriptionZh: `CP When 条件：${patch.key ?? "未知键"}`,
-      reasonZh: `未解析条件：${patch.key ?? "When"}。已保留原始条件，等待后续补充解析规则。`,
+      reasonZh: `未解析条件：${patch.key ?? "When"}`,
       reasonRaw: patch.reason,
       actualZh: patch.value ?? patch.rawValue ?? "无原始值",
     });
@@ -767,6 +1187,7 @@ export function buildGameStateFromRuntime(runtime?: RuntimeGameState | null): Cu
     time: runtime.time,
     location: runtime.currentLocation,
     weather: runtime.weather,
+    isFestivalDay: runtime.isFestivalDay,
     installedModIds: runtime.installedModIds ?? undefined,
     friendship: runtime.friendshipPoints ?? {},
     seenEvents: runtime.seenEvents ?? [],

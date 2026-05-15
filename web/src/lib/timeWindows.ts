@@ -19,12 +19,15 @@ const TIMELINE_ORDER: StoryNodeStatus[] = [
   "Triggered",
 ];
 
-const GROUP_TITLES: Record<StoryNodeStatus, string> = {
+const GROUP_TITLES: Partial<Record<StoryNodeStatus, string>> = {
   Current: "当前可触发",
   AvailableLater: "可触发但当前上下文不满足",
   Locked: "锁定",
   Unknown: "无法判断",
   Triggered: "已触发",
+  NonTriggerable: "非可触发",
+  BranchTarget: "分支目标",
+  SpecialEvent: "特殊事件",
 };
 
 export function extractTimeWindow(

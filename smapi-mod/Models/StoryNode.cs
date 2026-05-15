@@ -6,6 +6,8 @@ public sealed class StoryNode
 
     public string EventId { get; init; } = string.Empty;
 
+    public StoryNodeEventKind EventKind { get; init; } = StoryNodeEventKind.RegularLocationEvent;
+
     public string SourceModId { get; init; } = string.Empty;
 
     public string SourceModName { get; init; } = string.Empty;
@@ -34,4 +36,9 @@ public sealed class StoryNode
     public List<RelatedDialogueRef> RelatedDialogueRefs { get; init; } = new();
 
     public List<RelatedEventChoiceRef> RelatedEventChoiceRefs { get; init; } = new();
+
+    public Dictionary<string, string> SourceModConfigValues { get; init; } = new(StringComparer.OrdinalIgnoreCase);
+
+    public Dictionary<string, List<DynamicTokenDefinition>> SourceModDynamicTokens { get; init; } =
+        new(StringComparer.OrdinalIgnoreCase);
 }

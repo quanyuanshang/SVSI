@@ -412,6 +412,92 @@ export function loadTranslationCatalog(catalog?: TranslationCatalog | null): voi
   untranslatedNames.clear();
 }
 
+export function listKnownCharactersFromCatalog(
+  catalog?: TranslationCatalog | null,
+): string[] {
+  const names = new Set<string>(Object.keys(FALLBACK_CHARACTERS));
+
+  for (const entry of catalog?.entries ?? activeCatalog?.entries ?? []) {
+    const raw = entry.raw?.trim() ?? "";
+    if (normalizeKey(entry.category) !== "npc" || raw.length === 0) {
+      continue;
+    }
+
+    if (isNpcCatalogEntry(raw) && isTrustedNpcCatalogSource(entry)) {
+      names.add(raw);
+    }
+  }
+
+  return Array.from(names).sort((left, right) => left.localeCompare(right, "en"));
+}
+
+export function formatNpcFilterLabel(raw: string): string {
+  const trimmed = raw.trim();
+  if (FALLBACK_CHARACTERS[trimmed]) {
+    return FALLBACK_CHARACTERS[trimmed];
+  }
+
+  const caseMatch = Object.keys(FALLBACK_CHARACTERS).find(
+    (name) => name.toLowerCase() === trimmed.toLowerCase(),
+  );
+  if (caseMatch) {
+    return FALLBACK_CHARACTERS[caseMatch];
+  }
+
+  const translated = translateCharacter(trimmed);
+  if (translated.untranslated || looksLikeDialogueLine(translated.zh)) {
+    return trimmed;
+  }
+
+  return translated.zh;
+}
+
+function isTrustedNpcCatalogSource(entry: TranslationEntry): boolean {
+  if (entry.source === "vanilla-export") {
+    return true;
+  }
+
+  const path = (entry.sourcePath ?? "").replace(/\\/g, "/").toLowerCase();
+  if (path.includes("dialogue")) {
+    return false;
+  }
+
+  return (
+    path.includes("data/characters") ||
+    path.includes("data/npcdispositions") ||
+    (path.includes("/characters/") && !path.includes("dialogue"))
+  );
+}
+
+function looksLikeDialogueLine(zh: string): boolean {
+  const trimmed = zh.trim();
+  if (trimmed.length <= 12) {
+    return false;
+  }
+
+  if (/[。！？…]/.test(trimmed)) {
+    return true;
+  }
+
+  return trimmed.length >= 24;
+}
+
+function isNpcCatalogEntry(raw: string): boolean {
+  if (raw.length < 2 || raw.length > 32) {
+    return false;
+  }
+
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(raw)) {
+    return false;
+  }
+
+  if (/^\d+$/.test(raw) || /\d{5,}/.test(raw)) {
+    return false;
+  }
+
+  return true;
+}
+
 export function loadModTranslations(modPath: string): TranslationEntry[] {
   const modKey = normalizeKey(modPath);
   return (activeCatalog?.entries ?? []).filter(
@@ -546,19 +632,11 @@ export function formatWeatherZh(weather?: string | null): string {
 }
 
 export function isKnownCharacter(raw?: string | null): boolean {
-  return !!raw && !translateCharacter(raw).untranslated;
+  return !!raw && isNpcCatalogEntry(raw.trim()) && !translateCharacter(raw).untranslated;
 }
 
 export function listKnownCharacters(): string[] {
-  const names = new Set<string>(Object.keys(FALLBACK_CHARACTERS));
-
-  for (const entry of activeCatalog?.entries ?? []) {
-    if (normalizeKey(entry.category) === "npc" && entry.raw.trim().length > 0) {
-      names.add(entry.raw.trim());
-    }
-  }
-
-  return Array.from(names).sort((left, right) => left.localeCompare(right, "en"));
+  return listKnownCharactersFromCatalog(activeCatalog);
 }
 
 function isRelevantLocationEntry(entry: TranslationEntry): boolean {

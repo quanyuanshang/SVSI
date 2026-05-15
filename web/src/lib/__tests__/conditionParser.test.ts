@@ -87,6 +87,22 @@ describe("parseConditionFragment", () => {
     expect(spouseBed.descriptionZh).toContain("配偶床位");
   });
 
+  it("parses F as notFestivalDay", () => {
+    const result = parseConditionFragment("F");
+    expect(result.type).toBe("notFestivalDay");
+    expect(result.negated).toBe(true);
+    expect(result.descriptionZh).toContain("节日");
+  });
+
+  it("parses u 12 19 20 as a day-of-month list", () => {
+    const result = parseConditionFragment("u 12 19 20");
+    expect(result.type).toBe("dayOfMonth");
+    expect(result.value).toEqual(["12", "19", "20"]);
+    expect(result.descriptionZh).toContain("12");
+    expect(result.descriptionZh).toContain("19");
+    expect(result.descriptionZh).toContain("20");
+  });
+
   it("parses season list `s spring summer`", () => {
     const result = parseConditionFragment("s spring summer");
     expect(result.type).toBe("season");

@@ -56,7 +56,14 @@ export type ConditionType =
   | "sawSecretNote"
   | "upcomingFestival"
   | "notUpcomingFestival"
+  | "seasonDay"
+  | "relationshipStates"
   | "unknown";
+
+export interface SeasonDayValue {
+  season: string;
+  day: number;
+}
 
 export interface TimeRange {
   start: number;
@@ -295,6 +302,10 @@ export function parseConditionFragment(rawFragment: string): ParsedCondition {
 
   const head = tokens[0];
   const args = tokens.slice(1);
+  if (isGameStateQueryName(head)) {
+    return parseGameStateQuery(raw, tokens, explicitNegated);
+  }
+
   const { canonical, legacyNegated } = normalizeKeyword(head);
   if (!canonical) {
     return unknownCondition(raw, `未支持的条件 token：${head}`);
@@ -384,7 +395,7 @@ export function parseConditionFragment(rawFragment: string): ParsedCondition {
     case "FreeInventorySlots":
       return buildSimpleCondition(raw, "freeInventorySlots", negated, args[0] ? `背包空位至少 ${args[0]} 格` : "背包空位条件", undefined, args[0], ">=");
     case "GameStateQuery":
-      return buildSimpleCondition(raw, "gameStateQuery", negated, `游戏状态查询：${args.join(" ") || "已保留原文"}`, undefined, args);
+      return parseGameStateQuery(raw, tokens, negated);
     case "MissingPet":
       return buildSimpleCondition(raw, "missingPet", negated, negated ? "宠物未丢失" : "宠物处于丢失状态");
     case "HasItem":
@@ -715,6 +726,75 @@ function parseRoommate(raw: string, args: string[], negated: boolean): ParsedCon
     negated ? `玩家没有和${npcName(target)}成为室友` : `玩家已和${npcName(target)}成为室友`,
     target,
   );
+}
+
+function isGameStateQueryName(token: string): boolean {
+  const upper = token.toUpperCase();
+  return upper.startsWith("PLAYER_") || upper === "SEASON_DAY";
+}
+
+function parseGameStateQuery(raw: string, args: string[], negated: boolean): ParsedCondition {
+  if (args.length === 0) {
+    return unknownCondition(raw, "GameStateQuery 缺少查询名");
+  }
+
+  const queryName = args[0].toUpperCase();
+  const queryArgs = args
+    .slice(1)
+    .filter((value) => value.toLowerCase() !== "current");
+
+  switch (queryName) {
+    case "SEASON_DAY": {
+      if (queryArgs.length < 2) {
+        return unknownCondition(raw, "SEASON_DAY 参数不足");
+      }
+
+      const day = Number.parseInt(queryArgs[1], 10);
+      if (Number.isNaN(day)) {
+        return unknownCondition(raw, "SEASON_DAY 日期不是数字");
+      }
+
+      const seasonLabel = formatSeasonZh(queryArgs[0]);
+      return {
+        raw,
+        type: "seasonDay",
+        negated,
+        value: { season: queryArgs[0], day },
+        descriptionZh: negated
+          ? `不是 ${seasonLabel} 第 ${day} 天`
+          : `需要 ${seasonLabel} 第 ${day} 天`,
+        descriptionRaw: raw,
+      };
+    }
+    case "PLAYER_HAS_SEEN_EVENT":
+      return parseSeenEvent(raw, queryArgs.length > 0 ? [queryArgs[0]] : [], negated);
+    case "PLAYER_HAS_MAIL":
+      return parseMail(raw, queryArgs.length > 0 ? [queryArgs[0]] : [], negated, "mail", "notMail", "本地邮件");
+    case "PLAYER_HAS_FLAG":
+      return parseMail(raw, queryArgs.length > 0 ? [queryArgs[0]] : [], negated, "mail", "notMail", "邮件标记");
+    case "PLAYER_NPC_RELATIONSHIP": {
+      if (queryArgs.length < 2) {
+        return unknownCondition(raw, "PLAYER_NPC_RELATIONSHIP 参数不足");
+      }
+
+      const target = queryArgs[0];
+      const allowed = queryArgs.slice(1);
+      const allowedLabel = allowed.join(" / ");
+      return {
+        raw,
+        type: "relationshipStates",
+        negated,
+        target,
+        value: allowed,
+        descriptionZh: negated
+          ? `${npcName(target)} 不是 ${allowedLabel}`
+          : `${npcName(target)} 需要 ${allowedLabel}`,
+        descriptionRaw: raw,
+      };
+    }
+    default:
+      return unknownCondition(raw, `未支持的 GameStateQuery：${queryName}`);
+  }
 }
 
 export function parseConditions(rawFragments: readonly string[]): ParsedCondition[] {

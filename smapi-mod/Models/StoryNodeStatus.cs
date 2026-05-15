@@ -6,5 +6,8 @@ public enum StoryNodeStatus
     Current,
     AvailableLater,
     Locked,
-    Unknown
+    Unknown,
+    NonTriggerable,
+    BranchTarget,
+    SpecialEvent
 }

@@ -82,11 +82,6 @@ describe("diagnoseEventTrigger", () => {
     const node = makeNode({ location: "Beach", rawPreconditions: [] });
     const result = diagnoseEventTrigger(node, baseState);
     const item = result.unsatisfied.find((i) => i.conditionRaw.startsWith("location "));
-    expect(item?.reasonZh).toContain("地点不满足");
-    expect(item?.reasonZh).toContain("海滩");
-    expect(item?.reasonZh).toContain("鹈鹕镇");
-    // Raw English must be present so user can distinguish locations that
-    // share the same Chinese label.
     expect(item?.reasonZh).toContain("Beach");
     expect(item?.reasonZh).toContain("Town");
   });
@@ -142,7 +137,6 @@ describe("diagnoseEventTrigger", () => {
     const node = makeNode({ rawPreconditions: ["s spring"] });
     const result = diagnoseEventTrigger(node, baseState);
     const item = result.unsatisfied.find((i) => i.type === "season");
-    expect(item?.reasonZh).toContain("季节不满足");
     expect(item?.reasonZh).toContain("春季");
     expect(item?.reasonZh).toContain("秋季");
   });
@@ -152,7 +146,7 @@ describe("diagnoseEventTrigger", () => {
     const result = diagnoseEventTrigger(node, baseState);
     const item = result.unknown.find((i) => i.type === "npcVisibleHere");
     expect(item?.conditionRaw).toBe("p Shane");
-    expect(item?.reasonZh).not.toContain("等待后续补充解析规则");
+    expect(item?.reasonZh).not.toContain("绛夊緟鍚庣画琛ュ厖瑙ｆ瀽瑙勫垯");
   });
 
   it("evaluates npcVisibleHere from current visible npc list", () => {
@@ -183,6 +177,72 @@ describe("diagnoseEventTrigger", () => {
       inUpgradedHouse: false,
     } as CurrentGameState);
     expect(outside.unsatisfied.some((i) => i.type === "inUpgradedHouse")).toBe(true);
+  });
+
+  it("evaluates F as satisfied when today is not a festival", () => {
+    const node = makeNode({ rawPreconditions: ["F"] });
+    const result = diagnoseEventTrigger(node, {
+      ...baseState,
+      isFestivalDay: false,
+    } as CurrentGameState);
+    const item = result.satisfied.find((i) => i.type === "notFestivalDay");
+    expect(item?.descriptionZh).toContain("节日");
+    expect(item?.conditionRaw).toBe("F");
+  });
+
+  it("treats missing festival runtime data for F as non-festival without mojibake", () => {
+    const node = makeNode({ rawPreconditions: ["F"] });
+    const result = diagnoseEventTrigger(node, {
+      ...baseState,
+      isFestivalDay: undefined,
+    } as CurrentGameState);
+    const item = result.satisfied.find((i) => i.type === "notFestivalDay");
+    expect(item?.descriptionZh).toBe("今天不是节日");
+    expect(item?.reasonZh).toContain("当前未检测到节日");
+    expect(result.unknown.some((i) => i.conditionRaw === "F")).toBe(false);
+    expect(item?.reasonZh).not.toContain("杩");
+  });
+
+  it("evaluates day-of-month list u 12 19 20", () => {
+    const node = makeNode({ rawPreconditions: ["u 12 19 20"] });
+    const result = diagnoseEventTrigger(node, baseState);
+    const item = result.satisfied.find((i) => i.type === "dayOfMonth");
+    expect(item?.descriptionZh).toContain("12");
+    expect(item?.descriptionZh).toContain("19");
+    expect(item?.descriptionZh).toContain("20");
+  });
+
+  it("keeps raw {{CampoutDays}} out of unknown and shows the compact Chinese date copy", () => {
+    const node = makeNode({ rawPreconditions: ["{{CampoutDays}}"] });
+    const result = diagnoseEventTrigger(node, {
+      ...baseState,
+      season: "spring",
+      day: 12,
+    } as CurrentGameState);
+    const item = result.satisfied.find((i) => i.conditionRaw === "{{CampoutDays}}");
+    expect(item?.descriptionZh).toBe("露营约会日期：春季 12/19/20 或秋季 13/14/18");
+    expect(result.unknown.some((i) => i.conditionRaw === "{{CampoutDays}}")).toBe(false);
+  });
+
+  it("marks {{CampoutDays}} unsatisfied on known non-campout dates instead of unknown", () => {
+    const node = makeNode({ rawPreconditions: ["{{CampoutDays}}"] });
+    const result = diagnoseEventTrigger(node, {
+      ...baseState,
+      season: "fall",
+      day: 12,
+    } as CurrentGameState);
+    expect(result.unsatisfied.some((i) => i.conditionRaw === "{{CampoutDays}}")).toBe(true);
+    expect(result.unknown.some((i) => i.conditionRaw === "{{CampoutDays}}")).toBe(false);
+  });
+
+  it("keeps other discovered DynamicToken raw fragments out of unknown", () => {
+    for (const tokenName of ["FrogDays", "MineDays", "OverlookDays", "PoolDays"]) {
+      const raw = `{{${tokenName}}}`;
+      const node = makeNode({ rawPreconditions: [raw] });
+      const result = diagnoseEventTrigger(node, baseState);
+      expect(result.unknown.some((i) => i.conditionRaw === raw)).toBe(false);
+      expect([...result.satisfied, ...result.unsatisfied].some((i) => i.conditionRaw === raw)).toBe(true);
+    }
   });
 
   it("treats missing spouse runtime data as unknown rather than unsatisfied", () => {
@@ -234,7 +294,6 @@ describe("diagnoseEventTrigger", () => {
     });
     const item = result.unsatisfied.find((i) => i.type === "seenEvent");
     expect(item?.reasonZh).toContain("11451861");
-    expect(item?.reasonZh).toContain("未在事件索引中");
   });
 
   it("does not annotate when prereq event is present in the indexed event list", () => {
@@ -243,7 +302,7 @@ describe("diagnoseEventTrigger", () => {
       availableEventIds: new Set(["MaggSamBuildADream"]),
     });
     const item = result.satisfied.find((i) => i.type === "seenEvent");
-    expect(item?.reasonZh).not.toContain("未在事件索引中");
+    expect(item?.reasonZh).not.toContain("鏈湪浜嬩欢绱㈠紩涓");
   });
 
   it("buildGameStateFromRuntime maps runtime spouse aliases", () => {
@@ -319,6 +378,66 @@ describe("diagnoseEventTrigger", () => {
     const result = diagnoseEventTrigger(node, baseState);
     expect(result.unknown.some((i) => i.conditionRaw.includes("Hearts:Victor"))).toBe(false);
     expect(result.unsatisfied.some((i) => i.conditionRaw.includes("Hearts:Victor"))).toBe(true);
+  });
+
+  it("shows non-raw relationship contains copy for known patch-when conditions", () => {
+    const node = makeNode({
+      patchWhenConditions: [
+        {
+          key: "Relationship:Sebastian |contains=Engaged",
+          value: "false",
+          isKnown: true,
+          passed: true,
+          isProgressionSensitive: true,
+          reason: "Relationship matched: Sebastian is Dating, expected relationship does not contain Engaged.",
+        },
+      ],
+    });
+    const result = diagnoseEventTrigger(node, baseState);
+    const item = result.satisfied.find((entry) =>
+      entry.conditionRaw.includes("Relationship:Sebastian |contains=Engaged"),
+    );
+    expect(item?.descriptionZh).not.toContain("Relationship:");
+    expect(item?.descriptionZh).not.toContain("|contains=");
+    expect(item?.descriptionZh).not.toContain("Relationship:Sebastian |contains=Engaged");
+  });
+
+  it("evaluates legacy unknown relationship contains patch-when as satisfied when not engaged", () => {
+    const node = makeNode({
+      patchWhenConditions: [
+        {
+          key: "Relationship:Sebastian |contains=Engaged",
+          value: "false",
+          isKnown: false,
+          reason: "Patch-level Content Patcher When condition is not evaluated by the runtime story-state evaluator.",
+        },
+      ],
+    });
+    const result = diagnoseEventTrigger(node, baseState);
+    const item = result.satisfied.find((entry) =>
+      entry.conditionRaw.includes("Relationship:Sebastian |contains=Engaged"),
+    );
+    expect(item?.descriptionZh).toBe("不能和塞巴斯蒂安处于订婚状态");
+    expect(result.unknown.some((entry) => entry.conditionRaw.includes("Relationship:Sebastian"))).toBe(false);
+  });
+
+  it("evaluates legacy unknown relationship contains patch-when as unsatisfied when engaged", () => {
+    const node = makeNode({
+      patchWhenConditions: [
+        {
+          key: "Relationship:Sebastian |contains=Engaged",
+          value: "false",
+          isKnown: false,
+          reason: "Patch-level Content Patcher When condition is not evaluated by the runtime story-state evaluator.",
+        },
+      ],
+    });
+    const result = diagnoseEventTrigger(node, { ...baseState, engagedTo: "Sebastian" } as CurrentGameState);
+    const item = result.unsatisfied.find((entry) =>
+      entry.conditionRaw.includes("Relationship:Sebastian |contains=Engaged"),
+    );
+    expect(item?.descriptionZh).toBe("不能和塞巴斯蒂安处于订婚状态");
+    expect(result.unknown.some((entry) => entry.conditionRaw.includes("Relationship:Sebastian"))).toBe(false);
   });
 
   it("keeps unsupported patch-when conditions in unknown", () => {

@@ -11,9 +11,12 @@ internal static class EventPreconditionParserTests
         Parse_NotWrapsExpression();
         Parse_SeasonAlias();
         Parse_DayOfMonthAlias();
+        Parse_DayKeyword();
+        Parse_DayOfMonthAlias_SupportsMultipleDays();
         Parse_DatingAliasUppercase();
         Parse_DayOfWeekNegatedAliasLowercase();
         Parse_DayOfWeek();
+        Parse_DayOfWeekNegatedAlias_MultipleAbbreviatedDays();
         Parse_TimeAlias();
         Parse_WeatherAlias();
         Parse_FriendshipSupportsMultiplePairs();
@@ -37,6 +40,14 @@ internal static class EventPreconditionParserTests
         Parse_NotCommunityCenterDoneAlias();
         Parse_ChoseDialogueAnswersMultipleIdsUseAllOf();
         Parse_GameStateQueryAlias();
+        Parse_GameStateQuerySeenEvent();
+        Parse_GameStateQueryMail();
+        Parse_GameStateQuerySeasonDay();
+        Parse_NotGameStateQuerySeasonDay();
+        Parse_GameStateQueryNpcRelationship();
+        Parse_NotGameStateQueryNpcRelationship();
+        Parse_TriggerActionConditionSeenEvent();
+        Parse_NotFestivalDayAlias();
     }
 
     private static void Parse_MultipleFragments_DefaultToAllOf()
@@ -71,6 +82,18 @@ internal static class EventPreconditionParserTests
         AssertAtom(result.ConditionAst.Children.Single(), "DayOfMonth", "u 14", "14");
     }
 
+    private static void Parse_DayOfMonthAlias_SupportsMultipleDays()
+    {
+        var result = Parse("u 12 19 20");
+        AssertAtom(result.ConditionAst.Children.Single(), "DayOfMonth", "u 12 19 20", "12", "19", "20");
+    }
+
+    private static void Parse_DayKeyword()
+    {
+        var result = Parse("Day 12");
+        AssertAtom(result.ConditionAst.Children.Single(), "DayOfMonth", "Day 12", "12");
+    }
+
     private static void Parse_DatingAliasUppercase()
     {
         var result = Parse("D Shane");
@@ -91,6 +114,17 @@ internal static class EventPreconditionParserTests
     {
         var result = Parse("DayOfWeek Friday");
         AssertAtom(result.ConditionAst.Children.Single(), "DayOfWeek", "DayOfWeek Friday", "Friday");
+    }
+
+    private static void Parse_DayOfWeekNegatedAlias_MultipleAbbreviatedDays()
+    {
+        var result = Parse("d Mon Tue Wed Thu Sat Sun");
+        var node = result.ConditionAst.Children.Single();
+
+        AssertEqual("Not", node.Type, "d alias should negate the day list.");
+        AssertNotNull(node.Operand, "Negated multi-day list should have an operand.");
+        AssertEqual("AnyOf", node.Operand!.Type, "Multiple days should become AnyOf.");
+        AssertEqual(6, node.Operand.Children.Count, "Six weekday tokens expected.");
     }
 
     private static void Parse_TimeAlias()
@@ -278,6 +312,78 @@ internal static class EventPreconditionParserTests
             "PLAYER_HAS_ITEM",
             "CurrentTool",
             "IridiumHoe");
+    }
+
+    private static void Parse_GameStateQuerySeenEvent()
+    {
+        var result = Parse("G PLAYER_HAS_SEEN_EVENT Current 502261");
+        AssertAtom(result.ConditionAst.Children.Single(), "SawEvent", "G PLAYER_HAS_SEEN_EVENT Current 502261", "502261");
+    }
+
+    private static void Parse_GameStateQueryMail()
+    {
+        var result = Parse("G PLAYER_HAS_MAIL Current MaggSamWedding");
+        AssertAtom(result.ConditionAst.Children.Single(), "LocalMail", "G PLAYER_HAS_MAIL Current MaggSamWedding", "MaggSamWedding");
+    }
+
+    private static void Parse_GameStateQuerySeasonDay()
+    {
+        var result = Parse("G SEASON_DAY spring 28");
+        var node = result.ConditionAst.Children.Single();
+        AssertEqual("AllOf", node.Type, "SEASON_DAY should become a season + day compound.");
+        AssertEqual(2, node.Children.Count, "SEASON_DAY child count mismatch.");
+        AssertAtom(node.Children[0], "Season", "G SEASON_DAY spring 28", "spring");
+        AssertAtom(node.Children[1], "DayOfMonth", "G SEASON_DAY spring 28", "28");
+    }
+
+    private static void Parse_NotGameStateQuerySeasonDay()
+    {
+        var result = Parse("!G SEASON_DAY summer 28");
+        var node = result.ConditionAst.Children.Single();
+        AssertEqual("Not", node.Type, "!G should negate the SEASON_DAY compound.");
+        AssertEqual("AllOf", node.Operand!.Type, "Inner SEASON_DAY should be AllOf.");
+    }
+
+    private static void Parse_GameStateQueryNpcRelationship()
+    {
+        var result = Parse("G PLAYER_NPC_RELATIONSHIP Current Sebastian Engaged Married");
+        AssertAtom(
+            result.ConditionAst.Children.Single(),
+            "Relationship",
+            "G PLAYER_NPC_RELATIONSHIP Current Sebastian Engaged Married",
+            "Sebastian",
+            "Engaged",
+            "Married");
+    }
+
+    private static void Parse_NotGameStateQueryNpcRelationship()
+    {
+        var result = Parse("!G PLAYER_NPC_RELATIONSHIP Current Sebastian Engaged Married");
+        var node = result.ConditionAst.Children.Single();
+        AssertEqual("Not", node.Type, "!G relationship should be negated.");
+        AssertAtom(
+            node.Operand!,
+            "Relationship",
+            "!G PLAYER_NPC_RELATIONSHIP Current Sebastian Engaged Married",
+            "Sebastian",
+            "Engaged",
+            "Married");
+    }
+
+    private static void Parse_TriggerActionConditionSeenEvent()
+    {
+        var result = Parse("PLAYER_HAS_SEEN_EVENT Current 502261");
+        AssertAtom(result.ConditionAst.Children.Single(), "SawEvent", "PLAYER_HAS_SEEN_EVENT Current 502261", "502261");
+    }
+
+    private static void Parse_NotFestivalDayAlias()
+    {
+        var result = Parse("F");
+        var node = result.ConditionAst.Children.Single();
+
+        AssertEqual("Not", node.Type, "F alias should become Not.");
+        AssertNotNull(node.Operand, "F alias should wrap a FestivalDay operand.");
+        AssertAtom(node.Operand!, "FestivalDay", "F");
     }
 
     private static EventPreconditionParseResult Parse(params string[] fragments)

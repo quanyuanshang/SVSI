@@ -143,6 +143,11 @@ public sealed class EventPreconditionParser
         var keyword = tokens[0];
         var values = tokens.Skip(1).ToList();
 
+        if (IsGameStateQueryKeyword(keyword))
+        {
+            return this.ParseGameStateQuery(keyword, normalizedRawFragment, originalRawFragment, values);
+        }
+
         if (NegativeAliasMap.TryGetValue(keyword, out var negativeCanonicalName))
         {
             return new ConditionAstNode
@@ -193,7 +198,52 @@ public sealed class EventPreconditionParser
             "Friendship" => this.ParseFriendship(keyword, normalizedRawFragment, originalRawFragment, values, unknownFragments),
             "SawEvent" => this.ParseSawEvent(keyword, normalizedRawFragment, values),
             "ChoseDialogueAnswers" => this.ParseChoseDialogueAnswers(keyword, normalizedRawFragment, values),
+            "DayOfWeek" => this.ParseDayOfWeek(keyword, normalizedRawFragment, values),
+            "GameStateQuery" => this.ParseGameStateQuery(keyword, normalizedRawFragment, originalRawFragment, values),
             _ => CreateAtom(canonicalName, normalizedRawFragment, values)
+        };
+    }
+
+    private ConditionAstNode ParseGameStateQuery(
+        string keyword,
+        string normalizedRawFragment,
+        string originalRawFragment,
+        List<string> values)
+    {
+        if (values.Count == 0)
+        {
+            return CreateAtom("GameStateQuery", normalizedRawFragment, values);
+        }
+
+        var queryName = values[0];
+        var queryArgs = values.Skip(1).Where(value => !string.Equals(value, "Current", StringComparison.OrdinalIgnoreCase)).ToList();
+        if (IsGameStateQueryKeyword(keyword))
+        {
+            queryName = keyword;
+            queryArgs = values.Where(value => !string.Equals(value, "Current", StringComparison.OrdinalIgnoreCase)).ToList();
+        }
+
+        return queryName.ToUpperInvariant() switch
+        {
+            "PLAYER_HAS_SEEN_EVENT" when queryArgs.Count >= 1
+                => CreateAtom("SawEvent", originalRawFragment, new List<string> { queryArgs[0] }),
+            "PLAYER_HAS_MAIL" when queryArgs.Count >= 1
+                => CreateAtom("LocalMail", originalRawFragment, new List<string> { queryArgs[0] }),
+            "PLAYER_HAS_FLAG" when queryArgs.Count >= 1
+                => CreateAtom("LocalMail", originalRawFragment, new List<string> { queryArgs[0] }),
+            "SEASON_DAY" when queryArgs.Count >= 2
+                => new ConditionAstNode
+                {
+                    Type = "AllOf",
+                    Children = new List<ConditionAstNode>
+                    {
+                        CreateAtom("Season", originalRawFragment, new List<string> { queryArgs[0] }),
+                        CreateAtom("DayOfMonth", originalRawFragment, new List<string> { queryArgs[1] })
+                    }
+                },
+            "PLAYER_NPC_RELATIONSHIP" when queryArgs.Count >= 2
+                => CreateAtom("Relationship", originalRawFragment, queryArgs),
+            _ => CreateAtom("GameStateQuery", normalizedRawFragment, values)
         };
     }
 
@@ -255,6 +305,22 @@ public sealed class EventPreconditionParser
         };
     }
 
+    private ConditionAstNode ParseDayOfWeek(string keyword, string normalizedRawFragment, List<string> values)
+    {
+        if (values.Count <= 1)
+        {
+            return CreateAtom("DayOfWeek", normalizedRawFragment, values);
+        }
+
+        return new ConditionAstNode
+        {
+            Type = "AnyOf",
+            Children = values
+                .Select(value => CreateAtom("DayOfWeek", $"{keyword} {value}", new List<string> { value }))
+                .ToList()
+        };
+    }
+
     private ConditionAstNode ParseChoseDialogueAnswers(string keyword, string normalizedRawFragment, List<string> values)
     {
         if (values.Count <= 1)
@@ -284,6 +350,7 @@ public sealed class EventPreconditionParser
             "communitycenterorwarehousedone" => "CommunityCenterOrWarehouseDone",
             "season" => "Season",
             "dayofmonth" => "DayOfMonth",
+            "day" => "DayOfMonth",
             "dayofweek" => "DayOfWeek",
             "festivalday" => "FestivalDay",
             "freeinventoryslots" => "FreeInventorySlots",
@@ -321,6 +388,12 @@ public sealed class EventPreconditionParser
             "worldstate" => "WorldState",
             _ => null
         };
+    }
+
+    private static bool IsGameStateQueryKeyword(string keyword)
+    {
+        return keyword.StartsWith("PLAYER_", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(keyword, "SEASON_DAY", StringComparison.OrdinalIgnoreCase);
     }
 
     private static ConditionAstNode CreateAtom(string atomType, string raw, List<string> values)

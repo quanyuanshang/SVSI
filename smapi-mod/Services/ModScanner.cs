@@ -74,6 +74,11 @@ public sealed class ModScanner
 
             string? contentJsonPath = null;
             ContentJsonReadResult? contentJsonResult = null;
+            
+            var configPath = Path.Combine(modDirectory, "config.json");
+            var configValues = File.Exists(configPath)
+                ? this.ReadConfigValues(configPath)
+                : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
             if (isContentPatcherContentPack)
             {
@@ -107,7 +112,9 @@ public sealed class ModScanner
                 ContentJsonReadMode = contentJsonResult?.ReadMode,
                 ContentJsonSize = contentJsonResult?.Size,
                 ContentJsonSha256 = contentJsonResult?.Sha256,
-                ContentJsonError = contentJsonResult?.ParseError
+                ContentJsonError = contentJsonResult?.ParseError,
+                ConfigPath = File.Exists(configPath) ? configPath : null,
+                ConfigValues = configValues,
             };
         }
         catch (Exception ex)
@@ -152,6 +159,55 @@ public sealed class ModScanner
                 ParseError = ex.Message
             };
         }
+    }
+
+    private Dictionary<string, string> ReadConfigValues(string filePath)
+{
+    var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+    try
+    {
+        if (LooseJsonParser.ParseNodeFromFile(filePath) is not JsonObject root)
+        {
+            return values;
+        }
+
+        foreach (var pair in root)
+        {
+            if (pair.Value is null)
+            {
+                continue;
+            }
+
+            values[pair.Key] = ReadConditionValue(pair.Value);
+        }
+    }
+    catch (Exception ex)
+    {
+        this.monitor.Log($"Failed to read config.json '{filePath}': {ex.Message}", LogLevel.Warn);
+    }
+
+    return values;
+}
+
+    private static string ReadConditionValue(JsonNode? value)
+    {
+        if (value is null)
+        {
+            return string.Empty;
+        }
+
+        if (value is JsonValue jsonValue && jsonValue.TryGetValue<string>(out var stringValue))
+        {
+            return stringValue;
+        }
+
+        if (value is JsonValue boolValue && boolValue.TryGetValue<bool>(out var boolResult))
+        {
+            return boolResult ? "true" : "false";
+        }
+
+        return value.ToJsonString();
     }
 
     private ContentPackReference? ReadContentPackFor(JObject root)

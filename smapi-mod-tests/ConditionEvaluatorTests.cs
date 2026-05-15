@@ -8,7 +8,12 @@ internal static class ConditionEvaluatorTests
     public static void RunAll()
     {
         Evaluate_Season_TrueAndFalse();
+        Evaluate_FestivalDay_TrueAndFalse();
+        Evaluate_FestivalDay_MissingRuntimeDefaultsFalse();
         Evaluate_Time_TrueAndFalse();
+        Evaluate_Year_TrueAndFalse();
+        Evaluate_Spouse_TrueAndFalse();
+        Evaluate_IsHost_DefaultsTrue();
         Evaluate_Friendship_TrueAndFalse();
         Evaluate_Dating_TrueAndFalse();
         Evaluate_NpcVisibleHere_TrueAndFalse();
@@ -20,6 +25,13 @@ internal static class ConditionEvaluatorTests
         Evaluate_AnyOf();
         Evaluate_Not();
         Evaluate_Unknown();
+        Evaluate_DayOfWeekNegatedAbbreviations_OnSunday_IsUnsatisfied();
+        Evaluate_NotGameStateQuerySeasonDay_OnSummer7_Passes();
+        Evaluate_GameStateQuerySeasonDay_OnSummer28_Passes();
+        Evaluate_GameStateQuerySeasonDay_OnSummer7_Fails();
+        Evaluate_GameStateQueryNpcRelationship_Married_Passes();
+        Evaluate_GameStateQueryNpcRelationship_DatingOnly_Fails();
+        Evaluate_NotGameStateQueryNpcRelationship_DatingOnly_Passes();
     }
 
     private static void Evaluate_Season_TrueAndFalse()
@@ -50,6 +62,49 @@ internal static class ConditionEvaluatorTests
         var failed = evaluator.Evaluate(CreateAtom("Time", "t 600 1200", "600", "1200"), state);
         AssertEqual(false, failed.Passed, "Time false case mismatch.");
         AssertContains(failed.Reason, "outside", "Time false reason mismatch.");
+    }
+
+    private static void Evaluate_FestivalDay_TrueAndFalse()
+    {
+        var evaluator = new ConditionEvaluator();
+
+        var notFestival = evaluator.Evaluate(CreateAtom("FestivalDay", "F"), CreateBaseState(isFestivalDay: false));
+        AssertEqual(false, notFestival.Passed, "FestivalDay should fail when today is not a festival.");
+
+        var festival = evaluator.Evaluate(CreateAtom("FestivalDay", "F"), CreateBaseState(isFestivalDay: true));
+        AssertEqual(true, festival.Passed, "FestivalDay should pass when today is a festival.");
+        AssertEqual(true, festival.AtomResults[0].IsContextSensitive, "FestivalDay should be context-sensitive.");
+    }
+
+    private static void Evaluate_FestivalDay_MissingRuntimeDefaultsFalse()
+    {
+        var evaluator = new ConditionEvaluator();
+        var result = evaluator.Evaluate(CreateAtom("FestivalDay", "F"), CreateBaseState(isFestivalDay: null));
+        AssertEqual(false, result.Passed, "Missing festival runtime should be treated as not currently festival for legacy F.");
+        AssertEqual(false, result.HasUnknown, "Missing festival runtime should not make legacy F unknown.");
+    }
+
+    private static void Evaluate_Year_TrueAndFalse()
+    {
+        var evaluator = new ConditionEvaluator();
+        var state = CreateBaseState();
+        AssertEqual(true, evaluator.Evaluate(CreateAtom("Year", "y 1", "1"), state).Passed, "Year true case mismatch.");
+        AssertEqual(false, evaluator.Evaluate(CreateAtom("Year", "y 2", "2"), state).Passed, "Year false case mismatch.");
+    }
+
+    private static void Evaluate_Spouse_TrueAndFalse()
+    {
+        var evaluator = new ConditionEvaluator();
+        var state = CreateBaseState(spouse: "Wizard");
+        AssertEqual(true, evaluator.Evaluate(CreateAtom("Spouse", "O Wizard", "Wizard"), state).Passed, "Spouse true case mismatch.");
+        AssertEqual(false, evaluator.Evaluate(CreateAtom("Spouse", "O Sam", "Sam"), state).Passed, "Spouse false case mismatch.");
+    }
+
+    private static void Evaluate_IsHost_DefaultsTrue()
+    {
+        var evaluator = new ConditionEvaluator();
+        var state = CreateBaseState();
+        AssertEqual(true, evaluator.Evaluate(CreateAtom("IsHost", "H"), state).Passed, "Offline runtime should treat current player as host.");
     }
 
     private static void Evaluate_Friendship_TrueAndFalse()
@@ -200,6 +255,231 @@ internal static class ConditionEvaluatorTests
         AssertEqual(true, result.Passed, "Not case mismatch.");
     }
 
+    private static void Evaluate_DayOfWeekNegatedAbbreviations_OnSunday_IsUnsatisfied()
+    {
+        var parser = new EventPreconditionParser();
+        var parsed = parser.Parse(new[] { "d Mon Tue Wed Thu Sat Sun" });
+        var evaluator = new ConditionEvaluator();
+        var baseState = CreateBaseState();
+        var state = new RuntimeGameState
+        {
+            Year = baseState.Year,
+            Season = baseState.Season,
+            DayOfMonth = baseState.DayOfMonth,
+            DayOfWeek = "Sunday",
+            Time = baseState.Time,
+            Weather = baseState.Weather,
+            IsFestivalDay = baseState.IsFestivalDay,
+            CurrentLocation = baseState.CurrentLocation,
+            PlayerName = baseState.PlayerName,
+            InstalledModIds = baseState.InstalledModIds,
+            FriendshipPoints = baseState.FriendshipPoints,
+            DatingNpcNames = baseState.DatingNpcNames,
+            VisibleNpcNamesHere = baseState.VisibleNpcNamesHere,
+            InUpgradedHouse = baseState.InUpgradedHouse,
+            SeenEvents = baseState.SeenEvents,
+            Mail = baseState.Mail,
+            DialogueAnswers = baseState.DialogueAnswers,
+            DayEvents = baseState.DayEvents
+        };
+
+        var result = evaluator.Evaluate(parsed.ConditionAst, state);
+
+        AssertEqual(false, result.Passed, "Sunday is in the excluded list, so the negated day condition should fail.");
+        AssertEqual(false, result.HasUnknown, "Abbreviated weekdays should be known, not unknown.");
+    }
+
+    private static void Evaluate_NotGameStateQuerySeasonDay_OnSummer7_Passes()
+    {
+        var parser = new EventPreconditionParser();
+        var parsed = parser.Parse(new[] { "!G SEASON_DAY summer 28" });
+        var evaluator = new ConditionEvaluator();
+        var state = CreateBaseState();
+        state = new RuntimeGameState
+        {
+            Year = state.Year,
+            Season = "summer",
+            DayOfMonth = 7,
+            DayOfWeek = state.DayOfWeek,
+            Time = state.Time,
+            Weather = state.Weather,
+            IsFestivalDay = state.IsFestivalDay,
+            CurrentLocation = state.CurrentLocation,
+            PlayerName = state.PlayerName,
+            FriendshipPoints = state.FriendshipPoints,
+            DatingNpcNames = state.DatingNpcNames,
+            VisibleNpcNamesHere = state.VisibleNpcNamesHere,
+            InUpgradedHouse = state.InUpgradedHouse,
+            SeenEvents = state.SeenEvents,
+            Mail = state.Mail,
+            DialogueAnswers = state.DialogueAnswers,
+            DayEventsKnown = state.DayEventsKnown,
+            DayEvents = state.DayEvents
+        };
+
+        var result = evaluator.Evaluate(parsed.ConditionAst, state);
+        AssertEqual(true, result.Passed, "!G SEASON_DAY summer 28 should pass on summer day 7.");
+        AssertEqual(false, result.HasUnknown, "!G SEASON_DAY should be known.");
+    }
+
+    private static void Evaluate_GameStateQuerySeasonDay_OnSummer28_Passes()
+    {
+        var parser = new EventPreconditionParser();
+        var parsed = parser.Parse(new[] { "G SEASON_DAY summer 28" });
+        var evaluator = new ConditionEvaluator();
+        var state = CreateBaseState();
+        state = new RuntimeGameState
+        {
+            Year = state.Year,
+            Season = "summer",
+            DayOfMonth = 28,
+            DayOfWeek = state.DayOfWeek,
+            Time = state.Time,
+            Weather = state.Weather,
+            IsFestivalDay = state.IsFestivalDay,
+            CurrentLocation = state.CurrentLocation,
+            PlayerName = state.PlayerName,
+            FriendshipPoints = state.FriendshipPoints,
+            DatingNpcNames = state.DatingNpcNames,
+            VisibleNpcNamesHere = state.VisibleNpcNamesHere,
+            InUpgradedHouse = state.InUpgradedHouse,
+            SeenEvents = state.SeenEvents,
+            Mail = state.Mail,
+            DialogueAnswers = state.DialogueAnswers,
+            DayEventsKnown = state.DayEventsKnown,
+            DayEvents = state.DayEvents
+        };
+
+        var result = evaluator.Evaluate(parsed.ConditionAst, state);
+        AssertEqual(true, result.Passed, "G SEASON_DAY summer 28 should pass on summer day 28.");
+    }
+
+    private static void Evaluate_GameStateQuerySeasonDay_OnSummer7_Fails()
+    {
+        var parser = new EventPreconditionParser();
+        var parsed = parser.Parse(new[] { "G SEASON_DAY summer 28" });
+        var evaluator = new ConditionEvaluator();
+        var state = CreateBaseState();
+        state = new RuntimeGameState
+        {
+            Year = state.Year,
+            Season = "summer",
+            DayOfMonth = 7,
+            DayOfWeek = state.DayOfWeek,
+            Time = state.Time,
+            Weather = state.Weather,
+            IsFestivalDay = state.IsFestivalDay,
+            CurrentLocation = state.CurrentLocation,
+            PlayerName = state.PlayerName,
+            FriendshipPoints = state.FriendshipPoints,
+            DatingNpcNames = state.DatingNpcNames,
+            VisibleNpcNamesHere = state.VisibleNpcNamesHere,
+            InUpgradedHouse = state.InUpgradedHouse,
+            SeenEvents = state.SeenEvents,
+            Mail = state.Mail,
+            DialogueAnswers = state.DialogueAnswers,
+            DayEventsKnown = state.DayEventsKnown,
+            DayEvents = state.DayEvents
+        };
+
+        var result = evaluator.Evaluate(parsed.ConditionAst, state);
+        AssertEqual(false, result.Passed, "G SEASON_DAY summer 28 should fail on summer day 7.");
+    }
+
+    private static void Evaluate_GameStateQueryNpcRelationship_Married_Passes()
+    {
+        EvaluateRelationshipPasses("G PLAYER_NPC_RELATIONSHIP Current Sebastian Engaged Married", CreateSebastianMarriedState());
+    }
+
+    private static void Evaluate_GameStateQueryNpcRelationship_DatingOnly_Fails()
+    {
+        EvaluateRelationshipFails("G PLAYER_NPC_RELATIONSHIP Current Sebastian Engaged Married", CreateSebastianDatingState());
+    }
+
+    private static void Evaluate_NotGameStateQueryNpcRelationship_DatingOnly_Passes()
+    {
+        var parser = new EventPreconditionParser();
+        var parsed = parser.Parse(new[] { "!G PLAYER_NPC_RELATIONSHIP Current Sebastian Engaged Married" });
+        var evaluator = new ConditionEvaluator();
+        var result = evaluator.Evaluate(parsed.ConditionAst, CreateSebastianDatingState());
+        AssertEqual(true, result.Passed, "Negated relationship should pass when only dating.");
+    }
+
+    private static void EvaluateRelationshipPasses(string raw, RuntimeGameState state)
+    {
+        var parser = new EventPreconditionParser();
+        var parsed = parser.Parse(new[] { raw });
+        var evaluator = new ConditionEvaluator();
+        var result = evaluator.Evaluate(parsed.ConditionAst, state);
+        AssertEqual(true, result.Passed, $"Relationship should pass for {raw}.");
+        AssertEqual(false, result.HasUnknown, "Relationship should be known.");
+    }
+
+    private static void EvaluateRelationshipFails(string raw, RuntimeGameState state)
+    {
+        var parser = new EventPreconditionParser();
+        var parsed = parser.Parse(new[] { raw });
+        var evaluator = new ConditionEvaluator();
+        var result = evaluator.Evaluate(parsed.ConditionAst, state);
+        AssertEqual(false, result.Passed, $"Relationship should fail for {raw}.");
+    }
+
+    private static RuntimeGameState CreateSebastianMarriedState()
+    {
+        var state = CreateBaseState();
+        return new RuntimeGameState
+        {
+            Year = state.Year,
+            Season = state.Season,
+            DayOfMonth = state.DayOfMonth,
+            DayOfWeek = state.DayOfWeek,
+            Time = state.Time,
+            Weather = state.Weather,
+            IsFestivalDay = state.IsFestivalDay,
+            CurrentLocation = state.CurrentLocation,
+            PlayerName = state.PlayerName,
+            FriendshipPoints = state.FriendshipPoints,
+            DatingNpcNames = state.DatingNpcNames,
+            VisibleNpcNamesHere = state.VisibleNpcNamesHere,
+            InUpgradedHouse = state.InUpgradedHouse,
+            SeenEvents = state.SeenEvents,
+            Mail = state.Mail,
+            DialogueAnswers = state.DialogueAnswers,
+            DayEventsKnown = state.DayEventsKnown,
+            DayEvents = state.DayEvents,
+            SpouseName = "Sebastian",
+            Spouse = "Sebastian",
+            MarriedTo = "Sebastian",
+            Spouses = new[] { "Sebastian" }
+        };
+    }
+
+    private static RuntimeGameState CreateSebastianDatingState()
+    {
+        var state = CreateBaseState();
+        return new RuntimeGameState
+        {
+            Year = state.Year,
+            Season = state.Season,
+            DayOfMonth = state.DayOfMonth,
+            DayOfWeek = state.DayOfWeek,
+            Time = state.Time,
+            Weather = state.Weather,
+            IsFestivalDay = state.IsFestivalDay,
+            CurrentLocation = state.CurrentLocation,
+            PlayerName = state.PlayerName,
+            FriendshipPoints = state.FriendshipPoints,
+            DatingNpcNames = new HashSet<string>(new[] { "Sebastian" }, StringComparer.Ordinal),
+            VisibleNpcNamesHere = state.VisibleNpcNamesHere,
+            InUpgradedHouse = state.InUpgradedHouse,
+            SeenEvents = state.SeenEvents,
+            Mail = state.Mail,
+            DialogueAnswers = state.DialogueAnswers,
+            DayEventsKnown = state.DayEventsKnown,
+            DayEvents = state.DayEvents
+        };
+    }
+
     private static void Evaluate_Unknown()
     {
         var evaluator = new ConditionEvaluator();
@@ -220,7 +500,11 @@ internal static class ConditionEvaluatorTests
         AssertEqual(null, result.AtomResults[0].Passed, "Unknown atom result should be null.");
     }
 
-    private static RuntimeGameState CreateBaseState(bool inUpgradedHouse = true, params string[] visibleNpcNamesHere)
+    private static RuntimeGameState CreateBaseState(
+        bool inUpgradedHouse = true,
+        bool? isFestivalDay = false,
+        string? spouse = null,
+        params string[] visibleNpcNamesHere)
     {
         return new RuntimeGameState
         {
@@ -230,8 +514,11 @@ internal static class ConditionEvaluatorTests
             DayOfWeek = "Friday",
             Time = 1900,
             Weather = "sunny",
+            IsFestivalDay = isFestivalDay,
             CurrentLocation = "Town",
             PlayerName = "MockFarmer",
+            SpouseName = spouse,
+            Spouse = spouse,
             FriendshipPoints = new Dictionary<string, int>(StringComparer.Ordinal)
             {
                 ["Shane"] = 2200,

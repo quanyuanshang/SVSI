@@ -20,14 +20,13 @@ public sealed class StoryNodeStatusClassifier
             );
         }
 
-        if (!IsLocationTriggerableEventId(node.EventId) && node.RawPreconditions.Count == 0)
+        if (node.EventKind != StoryNodeEventKind.RegularLocationEvent)
         {
             return this.CreateEvaluation(
                 node,
                 conditionResult,
-                StoryNodeStatus.Unknown,
-                $"Event id '{node.EventId}' is non-numeric and has no preconditions; it is likely a fork/branch target or a game-triggered special event (e.g., PlayerKilled) rather than a regular location-entry event."
-            );
+                MapEventKindToStatus(node.EventKind),
+                DescribeNonTriggerableEvent(node));
         }
 
         var unknownPatchWhenConditions = node.PatchWhenConditions
@@ -39,8 +38,7 @@ public sealed class StoryNodeStatusClassifier
                 node,
                 conditionResult,
                 StoryNodeStatus.Unknown,
-                $"Patch-level When conditions are not evaluated: {string.Join("; ", unknownPatchWhenConditions.Select(FormatPatchWhenCondition))}. Cannot safely determine status."
-            );
+                BuildPatchWhenUnknownReason(unknownPatchWhenConditions));
         }
 
         var failedPatchWhenConditions = node.PatchWhenConditions
@@ -53,6 +51,19 @@ public sealed class StoryNodeStatusClassifier
                 conditionResult,
                 StoryNodeStatus.Locked,
                 $"Patch-level progression conditions failed: {string.Join("; ", failedPatchWhenConditions.Select(condition => condition.Reason))}"
+            );
+        }
+
+        var failedContextPatchWhenConditions = node.PatchWhenConditions
+            .Where(condition => condition.IsKnown && condition.Passed == false && condition.IsContextSensitive)
+            .ToList();
+        if (failedContextPatchWhenConditions.Count > 0)
+        {
+            return this.CreateEvaluation(
+                node,
+                conditionResult,
+                StoryNodeStatus.AvailableLater,
+                $"Patch-level context conditions are not currently met: {string.Join("; ", failedContextPatchWhenConditions.Select(condition => condition.Reason))}"
             );
         }
 
@@ -145,6 +156,7 @@ public sealed class StoryNodeStatusClassifier
         {
             NodeId = node.NodeId,
             EventId = node.EventId,
+            EventKind = node.EventKind,
             SourceModId = node.SourceModId,
             SourceModName = node.SourceModName,
             Location = node.Location,
@@ -162,6 +174,88 @@ public sealed class StoryNodeStatusClassifier
         };
     }
 
+    private static StoryNodeStatus MapEventKindToStatus(StoryNodeEventKind eventKind)
+    {
+        return eventKind switch
+        {
+            StoryNodeEventKind.BranchTarget => StoryNodeStatus.BranchTarget,
+            StoryNodeEventKind.SpecialGameEvent => StoryNodeStatus.SpecialEvent,
+            StoryNodeEventKind.DialogueOnly => StoryNodeStatus.NonTriggerable,
+            StoryNodeEventKind.InvalidOrUnsupported => StoryNodeStatus.NonTriggerable,
+            _ => StoryNodeStatus.NonTriggerable
+        };
+    }
+
+    private static string DescribeNonTriggerableEvent(StoryNode node)
+    {
+        return node.EventKind switch
+        {
+            StoryNodeEventKind.BranchTarget =>
+                $"Event id '{node.EventId}' is a fork/branch target or answer script, not a regular location-entry event.",
+            StoryNodeEventKind.SpecialGameEvent =>
+                $"Event id '{node.EventId}' is a game-triggered special event, not a regular location-entry event.",
+            StoryNodeEventKind.DialogueOnly =>
+                $"Event id '{node.EventId}' has no location-entry preconditions and is treated as dialogue-only metadata.",
+            StoryNodeEventKind.InvalidOrUnsupported =>
+                $"Event id '{node.EventId}' is not supported as a regular triggerable event.",
+            _ => $"Event id '{node.EventId}' is not classified as a regular location-entry event."
+        };
+    }
+
+    private static string BuildPatchWhenUnknownReason(IReadOnlyList<PatchWhenCondition> unknownPatchWhenConditions)
+    {
+        var runtimeMissing = unknownPatchWhenConditions
+            .Where(condition => string.Equals(condition.UnknownKind, "runtimeMissing", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var complexQuery = unknownPatchWhenConditions
+            .Where(condition => string.Equals(condition.UnknownKind, "complexQueryUnsupported", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var externalToken = unknownPatchWhenConditions
+            .Where(condition => string.Equals(condition.UnknownKind, "externalTokenMissing", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var randomToken = unknownPatchWhenConditions
+            .Where(condition => string.Equals(condition.UnknownKind, "randomTokenUnsupported", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        var parseUnknown = unknownPatchWhenConditions
+            .Where(condition =>
+                string.IsNullOrWhiteSpace(condition.UnknownKind)
+                || string.Equals(condition.UnknownKind, "parseUnknown", StringComparison.OrdinalIgnoreCase))
+            .ToList();
+
+        var parts = new List<string>();
+        if (runtimeMissing.Count > 0)
+        {
+            parts.Add($"运行时状态缺失：{string.Join("; ", runtimeMissing.Select(FormatPatchWhenReasonZh))}");
+        }
+
+        if (complexQuery.Count > 0)
+        {
+            parts.Add("复杂 CP Query 暂未展开");
+        }
+
+        if (externalToken.Count > 0)
+        {
+            parts.Add($"外部 token 未导出：{string.Join("; ", externalToken.Select(FormatPatchWhenReasonZh))}");
+        }
+
+        if (randomToken.Count > 0)
+        {
+            parts.Add("随机/概率条件暂不展开");
+        }
+
+        if (parseUnknown.Count > 0)
+        {
+            parts.Add($"解析器暂不支持：{string.Join("; ", parseUnknown.Select(FormatPatchWhenCondition))}");
+        }
+
+        if (parts.Count == 0)
+        {
+            parts.Add($"Patch-level When conditions are not evaluated: {string.Join("; ", unknownPatchWhenConditions.Select(FormatPatchWhenCondition))}");
+        }
+
+        return $"{string.Join("; ", parts)}. Cannot safely determine status.";
+    }
+
     private static string FormatPatchWhenCondition(PatchWhenCondition condition)
     {
         return string.IsNullOrWhiteSpace(condition.Value)
@@ -169,21 +263,10 @@ public sealed class StoryNodeStatusClassifier
             : $"{condition.Key}={condition.Value}";
     }
 
-    private static bool IsLocationTriggerableEventId(string eventId)
+    private static string FormatPatchWhenReasonZh(PatchWhenCondition condition)
     {
-        if (string.IsNullOrEmpty(eventId))
-        {
-            return false;
-        }
-
-        foreach (var character in eventId)
-        {
-            if (!char.IsDigit(character))
-            {
-                return false;
-            }
-        }
-
-        return true;
+        return !string.IsNullOrWhiteSpace(condition.ReasonZh)
+            ? condition.ReasonZh
+            : condition.Reason;
     }
 }

@@ -53,7 +53,7 @@ export default function App() {
     toggleModName,
     toggleLocation,
     toggleNpcName,
-  } = useStoryFilters(nodes, data?.translationCatalog);
+  } = useStoryFilters(nodes, data?.translationCatalog, data?.runtimeState);
 
   const selectedNode = useMemo(() => {
     if (!selectedNodeId) {

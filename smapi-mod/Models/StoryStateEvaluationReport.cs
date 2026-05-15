@@ -12,5 +12,7 @@ public sealed class StoryStateEvaluationReport
 
     public Dictionary<string, int> StatusCounts { get; init; } = new(StringComparer.Ordinal);
 
+    public List<UnknownConditionSummary> UnknownConditions { get; init; } = new();
+
     public List<StoryNodeEvaluation> Nodes { get; init; } = new();
 }

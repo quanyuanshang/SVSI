@@ -6,6 +6,8 @@ public sealed class StoryNodeEvaluation
 
     public string EventId { get; init; } = string.Empty;
 
+    public StoryNodeEventKind EventKind { get; init; } = StoryNodeEventKind.RegularLocationEvent;
+
     public string SourceModId { get; init; } = string.Empty;
 
     public string SourceModName { get; init; } = string.Empty;

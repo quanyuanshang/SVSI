@@ -1,13 +1,26 @@
 import type {
   ConditionAtomResult,
+  RuntimeGameState,
   StoryFilterOptions,
   StoryFilterState,
   StoryNodeEvaluation,
   StoryNodeStatus,
+  TranslationCatalog,
 } from "../types/story";
-import { extractCharactersFromNode } from "./characters";
+import { extractCharactersFromNode, isKnownNpc, isNpcInternalId } from "./characters";
 import { formatStatusLabel, formatLocationZh } from "./format";
-import { translateCharacter, translateLocation } from "./translations";
+import {
+  formatNpcFilterLabel,
+  listKnownCharactersFromCatalog,
+  translateCharacter,
+  translateLocation,
+} from "./translations";
+
+const NON_TRIGGERABLE_STATUSES = new Set<StoryNodeStatus>([
+  "NonTriggerable",
+  "BranchTarget",
+  "SpecialEvent",
+]);
 
 const STATUS_ORDER: StoryNodeStatus[] = [
   "Current",
@@ -15,6 +28,9 @@ const STATUS_ORDER: StoryNodeStatus[] = [
   "Locked",
   "Unknown",
   "Triggered",
+  "NonTriggerable",
+  "BranchTarget",
+  "SpecialEvent",
 ];
 
 // Group raw values whose translated zh label collides into a single filter
@@ -84,13 +100,19 @@ function buildEquivalenceMap(options: DedupedOption[]): Map<string, Set<string>>
   return map;
 }
 
+export interface StoryFilterCatalogOptions {
+  runtimeState?: RuntimeGameState | null;
+  translationCatalog?: TranslationCatalog | null;
+}
+
 export function getAvailableFilterOptions(
   nodes: StoryNodeEvaluation[],
+  catalogOptions?: StoryFilterCatalogOptions,
 ): StoryFilterOptions {
   const statuses = new Set<StoryNodeStatus>();
   const modNames = new Set<string>();
   const locationRaws = new Set<string>();
-  const npcRaws = new Set<string>();
+  const npcRaws = buildNpcFilterCandidates(nodes, catalogOptions);
 
   for (const node of nodes) {
     if (node.status) {
@@ -104,17 +126,13 @@ export function getAvailableFilterOptions(
     if (node.location) {
       locationRaws.add(node.location);
     }
-
-    for (const npcName of collectNpcNames(node)) {
-      npcRaws.add(npcName);
-    }
   }
 
   const locationOptions = sortByZh(
     dedupByTranslation(locationRaws, (raw) => translateLocation(raw).zh),
   );
   const npcOptions = sortByZh(
-    dedupByTranslation(npcRaws, (raw) => translateCharacter(raw).zh),
+    dedupByTranslation(npcRaws, (raw) => formatNpcFilterLabel(raw)),
   );
 
   return {
@@ -168,6 +186,14 @@ export function applyStoryFilters(
     }
 
     if (
+      filters.hideNonTriggerable &&
+      node.status &&
+      NON_TRIGGERABLE_STATUSES.has(node.status)
+    ) {
+      return false;
+    }
+
+    if (
       filters.selectedStatuses.size > 0 &&
       (!node.status || !filters.selectedStatuses.has(node.status))
     ) {
@@ -207,17 +233,41 @@ export function applyStoryFilters(
   });
 }
 
+function buildNpcFilterCandidates(
+  nodes: StoryNodeEvaluation[],
+  catalogOptions?: StoryFilterCatalogOptions,
+): Set<string> {
+  const catalog = catalogOptions?.translationCatalog ?? null;
+  const npcRaws = new Set<string>(listKnownCharactersFromCatalog(catalog));
+
+  for (const npcName of Object.keys(catalogOptions?.runtimeState?.friendshipPoints ?? {})) {
+    if (isNpcInternalId(npcName)) {
+      npcRaws.add(npcName);
+    }
+  }
+
+  for (const node of nodes) {
+    for (const npcName of extractCharactersFromNode(node)) {
+      if (isNpcInternalId(npcName)) {
+        npcRaws.add(npcName);
+      }
+    }
+  }
+
+  return npcRaws;
+}
+
 function collectNpcNames(node: StoryNodeEvaluation): Set<string> {
   const npcNames = new Set<string>(extractCharactersFromNode(node));
 
   for (const dialogueRef of node.relatedDialogueRefs ?? []) {
-    if (dialogueRef.npcName) {
+    if (dialogueRef.npcName && isKnownNpc(dialogueRef.npcName)) {
       npcNames.add(dialogueRef.npcName);
     }
   }
 
   for (const eventChoiceRef of node.relatedEventChoiceRefs ?? []) {
-    if (eventChoiceRef.npcName) {
+    if (eventChoiceRef.npcName && isKnownNpc(eventChoiceRef.npcName)) {
       npcNames.add(eventChoiceRef.npcName);
     }
   }
@@ -252,7 +302,7 @@ function extractNpcNamesFromFriendshipAtom(atom: ConditionAtomResult): string[] 
     const npcName = tokens[index];
     const points = tokens[index + 1];
 
-    if (!npcName || !/^-?\d+$/.test(points)) {
+    if (!npcName || !/^-?\d+$/.test(points) || !isKnownNpc(npcName)) {
       continue;
     }
 

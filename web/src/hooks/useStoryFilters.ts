@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
+import { refreshKnownNpcCache } from "../lib/characters";
 import { applyStoryFilters, getAvailableFilterOptions } from "../lib/storyFilters";
 import { loadTranslationCatalog } from "../lib/translations";
 import type {
+  RuntimeGameState,
   StoryFilterOptions,
   StoryFilterState,
   StoryNodeEvaluation,
@@ -27,12 +29,14 @@ const INITIAL_FILTERS: StoryFilterState = {
   selectedLocations: new Set<string>(),
   selectedNpcNames: new Set<string>(),
   hideTriggered: false,
+  hideNonTriggerable: true,
   searchText: "",
 };
 
 export function useStoryFilters(
   nodes: StoryNodeEvaluation[],
   translationCatalog?: TranslationCatalog | null,
+  runtimeState?: RuntimeGameState | null,
 ): UseStoryFiltersResult {
   const [filters, setFilters] = useState<StoryFilterState>(INITIAL_FILTERS);
 
@@ -46,9 +50,13 @@ export function useStoryFilters(
   const availableOptions = useMemo(
     () => {
       loadTranslationCatalog(translationCatalog ?? null);
-      return getAvailableFilterOptions(nodes);
+      refreshKnownNpcCache();
+      return getAvailableFilterOptions(nodes, {
+        translationCatalog: translationCatalog ?? null,
+        runtimeState: runtimeState ?? null,
+      });
     },
-    [nodes, translationCatalog],
+    [nodes, translationCatalog, runtimeState],
   );
 
   const filteredNodes = useMemo(

@@ -13,4 +13,10 @@ public sealed class ConditionAstNode
     public List<ConditionAstNode> Children { get; init; } = new();
 
     public ConditionAstNode? Operand { get; init; }
+
+    public string SourceKind { get; init; } = string.Empty;
+
+    public string SourceFile { get; init; } = string.Empty;
+
+    public string ExpandedFrom { get; init; } = string.Empty;
 }

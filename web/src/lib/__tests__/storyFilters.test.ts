@@ -1,6 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { refreshKnownNpcCache } from "../characters";
 import { applyStoryFilters, getAvailableFilterOptions } from "../storyFilters";
-import { loadTranslationCatalog } from "../translations";
+import {
+  formatNpcFilterLabel,
+  listKnownCharactersFromCatalog,
+  loadTranslationCatalog,
+} from "../translations";
 import type {
   StoryFilterState,
   StoryNodeEvaluation,
@@ -35,6 +40,7 @@ function makeFilters(overrides?: Partial<StoryFilterState>): StoryFilterState {
     selectedLocations: new Set(),
     selectedNpcNames: new Set(),
     hideTriggered: false,
+    hideNonTriggerable: true,
     searchText: "",
     ...overrides,
   };
@@ -43,6 +49,7 @@ function makeFilters(overrides?: Partial<StoryFilterState>): StoryFilterState {
 describe("storyFilters - de-duplication by translated label", () => {
   beforeEach(() => {
     loadTranslationCatalog(null);
+    refreshKnownNpcCache();
   });
 
   it("collapses FarmHouse / farmhouse / {{FarmHouse}} into a single location entry", () => {
@@ -98,6 +105,19 @@ describe("storyFilters - de-duplication by translated label", () => {
   });
 
   it("de-dupes NPC filter entries that share the same zh translation", () => {
+    loadTranslationCatalog({
+      entries: [
+        {
+          raw: "shane",
+          zh: "谢恩",
+          category: "npc",
+          source: "content",
+          sourcePath: "Mods/Test/Data/Characters/shane.json",
+        },
+      ],
+    });
+    refreshKnownNpcCache();
+
     const nodes = [
       makeNode({
         relatedDialogueRefs: [{ npcName: "Shane" }],
@@ -108,10 +128,15 @@ describe("storyFilters - de-duplication by translated label", () => {
     ];
 
     const options = getAvailableFilterOptions(nodes);
-    expect(options.npcNames).toHaveLength(1);
-    const rep = options.npcNames[0];
-    const equivalents = options.npcEquivalents?.get(rep);
-    expect(equivalents?.size).toBe(2);
+    const shaneRepresentatives = options.npcNames.filter((raw) => {
+      const group = options.npcEquivalents?.get(raw);
+      return group?.has("Shane") || group?.has("shane");
+    });
+
+    expect(shaneRepresentatives).toHaveLength(1);
+    const equivalents = options.npcEquivalents?.get(shaneRepresentatives[0]!);
+    expect(equivalents?.has("Shane")).toBe(true);
+    expect(equivalents?.has("shane")).toBe(true);
   });
 
   it("keeps untranslated raws as their own entry without crashing", () => {
@@ -200,5 +225,100 @@ describe("storyFilters - de-duplication by translated label", () => {
     );
 
     expect(filtered.map((item) => item.eventId)).toEqual(["MaggSebGame407092025"]);
+  });
+
+  it("does not add dialogue lines, event ids, or non-npc catalog entries to NPC filter options", () => {
+    loadTranslationCatalog({
+      entries: [
+        { raw: "Sebastian", zh: "塞巴斯蒂安", category: "npc", source: "test" },
+        { raw: "Sam", zh: "山姆", category: "npc", source: "test" },
+        { raw: "Alex", zh: "亚历克斯", category: "npc", source: "test" },
+        { raw: "Custom_SDS", zh: "某地点", category: "location", source: "test" },
+        { raw: "MaggSebGame4", zh: "错误对话", category: "item", source: "test" },
+      ],
+    });
+
+    const node = makeNode({
+      eventId: "MaggSebGame4",
+      rawKey: "end/healer",
+      rawPreconditions: ["A MaggSebGame4"],
+      rawScriptPreview: 'speak Sebastian "hello farmer"/end',
+      relatedDialogueRefs: [{ npcName: "Sebastian", previewText: "hello farmer" }],
+    });
+
+    const options = getAvailableFilterOptions([node], {
+      runtimeState: {
+        year: 1,
+        season: "spring",
+        dayOfMonth: 1,
+        dayOfWeek: "Mon",
+        time: 900,
+        weather: "Sun",
+        currentLocation: "Town",
+        playerName: "Farmer",
+        friendshipPoints: { Sebastian: 2500, Sam: 500 },
+        seenEvents: [],
+        mail: [],
+        dialogueAnswers: [],
+      },
+      translationCatalog: {
+        entries: [
+          { raw: "Sebastian", zh: "塞巴斯蒂安", category: "npc", source: "test" },
+          { raw: "Sam", zh: "山姆", category: "npc", source: "test" },
+          { raw: "Alex", zh: "亚历克斯", category: "npc", source: "test" },
+        ],
+      },
+    });
+
+    expect(options.npcNames).toEqual(expect.arrayContaining(["Sebastian", "Sam"]));
+    expect(options.npcNames).not.toContain("MaggSebGame4");
+    expect(options.npcNames).not.toContain("end");
+    expect(options.npcNames).not.toContain("healer");
+    expect(options.npcNames).not.toContain("Custom_SDS");
+    expect(options.npcNames).not.toContain("hello farmer this is dialogue");
+  });
+
+  it("ignores dialogue-file catalog rows when building NPC filter options", () => {
+    const catalog = {
+      entries: [
+        { raw: "Sebastian", zh: "塞巴斯蒂安", category: "npc", source: "vanilla-export" },
+        {
+          raw: "Mon",
+          zh: "这是周一的对话内容，不应该出现在角色筛选里。",
+          category: "npc",
+          source: "content",
+          sourcePath: "Mods/Example/Characters/Dialogue/Sebastian.json",
+        },
+        {
+          raw: "Hovsep",
+          zh: "霍夫塞普",
+          category: "npc",
+          source: "content",
+          sourcePath: "Mods/Example/Data/Characters/Hovsep.json",
+        },
+      ],
+    };
+
+    expect(listKnownCharactersFromCatalog(catalog)).toEqual(
+      expect.arrayContaining(["Sebastian", "Hovsep"]),
+    );
+    expect(listKnownCharactersFromCatalog(catalog)).not.toContain("Mon");
+
+    const options = getAvailableFilterOptions([], { translationCatalog: catalog });
+    expect(options.npcNames).not.toContain("Mon");
+    expect(formatNpcFilterLabel("Sebastian")).toBe("塞巴斯蒂安");
+    expect(formatNpcFilterLabel("Mon")).toBe("Mon");
+  });
+
+  it("lists all vanilla NPCs even when they do not appear in current nodes", () => {
+    const options = getAvailableFilterOptions([], {
+      translationCatalog: null,
+      runtimeState: null,
+    });
+
+    expect(options.npcNames).toContain("Sebastian");
+    expect(options.npcNames).toContain("Shane");
+    expect(options.npcNames).toContain("Sam");
+    expect(options.npcNames.length).toBeGreaterThan(30);
   });
 });

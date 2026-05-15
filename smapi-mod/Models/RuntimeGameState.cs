@@ -14,6 +14,8 @@ public sealed class RuntimeGameState
 
     public string Weather { get; init; } = string.Empty;
 
+    public bool? IsFestivalDay { get; init; }
+
     public string CurrentLocation { get; init; } = string.Empty;
 
     public string PlayerName { get; init; } = string.Empty;
@@ -45,4 +47,12 @@ public sealed class RuntimeGameState
     public HashSet<string> Mail { get; init; } = new(StringComparer.Ordinal);
 
     public HashSet<string> DialogueAnswers { get; init; } = new(StringComparer.Ordinal);
+
+    public bool ActiveDialogueEventsKnown { get; init; }
+
+    public HashSet<string> ActiveDialogueEvents { get; init; } = new(StringComparer.Ordinal);
+
+    public bool DayEventsKnown { get; init; }
+
+    public List<string> DayEvents { get; init; } = new();
 }

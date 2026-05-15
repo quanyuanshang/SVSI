@@ -328,7 +328,7 @@ public sealed class TranslationCatalogBuilder
             ("Data\\NPCDispositions", "npc"),
             ("Data\\Locations", "location"),
             ("Data\\Objects", "item"),
-            ("Characters\\Dialogue", "npc"),
+            ("Characters\\Dialogue", "dialogue"),
         };
 
         foreach (var (relativeDirectory, category) in candidates)
@@ -478,10 +478,15 @@ public sealed class TranslationCatalogBuilder
         }
 
         if (normalized.Equals("Data/Characters", StringComparison.OrdinalIgnoreCase) ||
-            normalized.Equals("Data/NPCDispositions", StringComparison.OrdinalIgnoreCase) ||
-            normalized.StartsWith("Characters/Dialogue", StringComparison.OrdinalIgnoreCase))
+            normalized.Equals("Data/NPCDispositions", StringComparison.OrdinalIgnoreCase))
         {
             category = "npc";
+            return true;
+        }
+
+        if (normalized.StartsWith("Characters/Dialogue", StringComparison.OrdinalIgnoreCase))
+        {
+            category = "dialogue";
             return true;
         }
 

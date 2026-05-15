@@ -117,6 +117,8 @@ public sealed class StoryNodeDialogueLinker
             UnknownFragments = node.UnknownFragments,
             RawScriptPreview = node.RawScriptPreview,
             EvidenceRefs = node.EvidenceRefs,
+            SourceModConfigValues = node.SourceModConfigValues,
+            SourceModDynamicTokens = node.SourceModDynamicTokens,
             RelatedDialogueRefs = relatedDialogueRefs,
             RelatedEventChoiceRefs = relatedEventChoiceRefs
         };

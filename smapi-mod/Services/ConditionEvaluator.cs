@@ -12,6 +12,7 @@ public sealed class ConditionEvaluator
         "DayOfWeek",
         "Time",
         "Weather",
+        "FestivalDay",
         "Location",
         "NpcVisibleHere",
         "InUpgradedHouse"
@@ -21,12 +22,15 @@ public sealed class ConditionEvaluator
     {
         "Friendship",
         "Dating",
+        "Relationship",
         "SawEvent",
         "Mail",
         "LocalMail",
         "HostMail",
         "HostOrLocalMail",
-        "ChoseDialogueAnswers"
+        "ChoseDialogueAnswers",
+        "ActiveDialogueEvent",
+        "Spouse"
     };
 
     public ConditionEvaluationResult Evaluate(ConditionAstNode ast, RuntimeGameState state)
@@ -176,13 +180,19 @@ public sealed class ConditionEvaluator
             "DayOfWeek" => this.EvaluateDayOfWeekAtom(raw, node.Values, state),
             "Time" => this.EvaluateTimeAtom(raw, node.Values, state),
             "Weather" => this.EvaluateWeatherAtom(raw, node.Values, state),
+            "FestivalDay" => this.EvaluateFestivalDayAtom(raw, state),
+            "Year" => this.EvaluateYearAtom(raw, node.Values, state),
+            "Spouse" => this.EvaluateSpouseAtom(raw, node.Values, state),
+            "IsHost" => this.CreateAtomResult(raw, "IsHost", true, "IsHost matched: offline/runtime export is treated as host."),
             "Friendship" => this.EvaluateFriendshipAtom(raw, node.Values, state),
             "Dating" => this.EvaluateDatingAtom(raw, node.Values, state),
+            "Relationship" => this.EvaluateRelationshipAtom(raw, node.Values, state),
             "NpcVisibleHere" => this.EvaluateNpcVisibleHereAtom(raw, node.Values, state),
             "InUpgradedHouse" => this.EvaluateInUpgradedHouseAtom(raw, state),
             "SawEvent" => this.EvaluateSawEventAtom(raw, node.Values, state),
             "LocalMail" or "HostMail" or "HostOrLocalMail" => this.EvaluateMailAtom(raw, atomType, node.Values, state),
             "ChoseDialogueAnswers" => this.EvaluateDialogueAnswerAtom(raw, node.Values, state),
+            "ActiveDialogueEvent" => this.EvaluateActiveDialogueEventAtom(raw, node.Values, state),
             "Unknown" => this.CreateUnknownAtomResult(raw, atomType, "Unknown atom cannot be evaluated."),
             _ => this.CreateUnknownAtomResult(raw, atomType, $"Unsupported atom type: {atomType}")
         };
@@ -270,7 +280,9 @@ public sealed class ConditionEvaluator
             return this.CreateUnknownAtomResult(raw, "DayOfWeek", "DayOfWeek condition has no candidate values.");
         }
 
-        var matched = values.Any(value => string.Equals(state.DayOfWeek, value, StringComparison.OrdinalIgnoreCase));
+        var normalizedCurrent = NormalizeDayOfWeekName(state.DayOfWeek);
+        var matched = values.Any(value =>
+            string.Equals(normalizedCurrent, NormalizeDayOfWeekName(value), StringComparison.OrdinalIgnoreCase));
         return this.CreateAtomResult(
             raw,
             "DayOfWeek",
@@ -279,6 +291,34 @@ public sealed class ConditionEvaluator
                 ? $"DayOfWeek matched: current {state.DayOfWeek} is in [{string.Join(", ", values)}]"
                 : $"DayOfWeek failed: current {state.DayOfWeek} is not in [{string.Join(", ", values)}]"
         );
+    }
+
+    private static string NormalizeDayOfWeekName(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0)
+        {
+            return trimmed;
+        }
+
+        return trimmed.ToUpperInvariant() switch
+        {
+            "MON" => "Monday",
+            "TUE" => "Tuesday",
+            "WED" => "Wednesday",
+            "THU" => "Thursday",
+            "FRI" => "Friday",
+            "SAT" => "Saturday",
+            "SUN" => "Sunday",
+            "MONDAY" => "Monday",
+            "TUESDAY" => "Tuesday",
+            "WEDNESDAY" => "Wednesday",
+            "THURSDAY" => "Thursday",
+            "FRIDAY" => "Friday",
+            "SATURDAY" => "Saturday",
+            "SUNDAY" => "Sunday",
+            _ => char.ToUpper(trimmed[0]) + trimmed[1..].ToLowerInvariant()
+        };
     }
 
     private ConditionAtomResult EvaluateTimeAtom(string raw, IReadOnlyList<string> values, RuntimeGameState state)
@@ -319,6 +359,65 @@ public sealed class ConditionEvaluator
             matched
                 ? $"Weather matched: current {state.Weather} is in [{string.Join(", ", values)}]"
                 : $"Weather failed: current {state.Weather} is not in [{string.Join(", ", values)}]"
+        );
+    }
+
+    private ConditionAtomResult EvaluateFestivalDayAtom(string raw, RuntimeGameState state)
+    {
+        if (state.IsFestivalDay is null)
+        {
+            return this.CreateAtomResult(raw, "FestivalDay", false, "FestivalDay defaulted false: runtime festival state is unavailable.");
+        }
+
+        return this.CreateAtomResult(
+            raw,
+            "FestivalDay",
+            state.IsFestivalDay.Value,
+            state.IsFestivalDay.Value
+                ? "FestivalDay matched: today is a festival day."
+                : "FestivalDay failed: today is not a festival day."
+        );
+    }
+
+    private ConditionAtomResult EvaluateYearAtom(string raw, IReadOnlyList<string> values, RuntimeGameState state)
+    {
+        if (values.Count == 0)
+        {
+            return this.CreateUnknownAtomResult(raw, "Year", "Year condition has no candidate values.");
+        }
+
+        var matched = values.Any(value => int.TryParse(value, out var parsedYear) && parsedYear == state.Year);
+        return this.CreateAtomResult(
+            raw,
+            "Year",
+            matched,
+            matched
+                ? $"Year matched: current year {state.Year} is in [{string.Join(", ", values)}]"
+                : $"Year failed: current year {state.Year} is not in [{string.Join(", ", values)}]"
+        );
+    }
+
+    private ConditionAtomResult EvaluateSpouseAtom(string raw, IReadOnlyList<string> values, RuntimeGameState state)
+    {
+        if (values.Count == 0)
+        {
+            return this.CreateUnknownAtomResult(raw, "Spouse", "Spouse condition has no npc name.");
+        }
+
+        var npcName = values[0];
+        var matched = IsListed(state.SpouseName, npcName)
+            || IsListed(state.Spouse, npcName)
+            || IsListed(state.MarriedTo, npcName)
+            || IsListed(state.Spouses, npcName)
+            || IsListed(state.EngagedTo, npcName);
+
+        return this.CreateAtomResult(
+            raw,
+            "Spouse",
+            matched,
+            matched
+                ? $"Spouse matched: player is married/engaged to {npcName}"
+                : $"Spouse failed: player is not married/engaged to {npcName}"
         );
     }
 
@@ -377,6 +476,80 @@ public sealed class ConditionEvaluator
                 ? $"Dating matched: player is dating {npcName}"
                 : $"Dating failed: player is not dating {npcName}"
         );
+    }
+
+    private ConditionAtomResult EvaluateRelationshipAtom(string raw, IReadOnlyList<string> values, RuntimeGameState state)
+    {
+        if (values.Count < 2 || string.IsNullOrWhiteSpace(values[0]))
+        {
+            return this.CreateUnknownAtomResult(raw, "Relationship", "Relationship condition requires npc and state list.");
+        }
+
+        var npcName = values[0].Trim();
+        var allowedStates = values
+            .Skip(1)
+            .Select(value => value.Trim())
+            .Where(value => value.Length > 0)
+            .ToList();
+        if (allowedStates.Count == 0)
+        {
+            return this.CreateUnknownAtomResult(raw, "Relationship", "Relationship condition has no allowed states.");
+        }
+
+        var currentState = GetRelationshipState(npcName, state) ?? "None";
+        var matched = allowedStates.Any(allowed =>
+            string.Equals(allowed, currentState, StringComparison.OrdinalIgnoreCase));
+        var allowedLabel = string.Join("/", allowedStates);
+
+        return this.CreateAtomResult(
+            raw,
+            "Relationship",
+            matched,
+            matched
+                ? $"{npcName}关系满足 {allowedLabel}"
+                : $"{npcName}当前关系为 {currentState}，要求 {allowedLabel}");
+    }
+
+    private static string? GetRelationshipState(string npcName, RuntimeGameState state)
+    {
+        if (IsListed(state.Roommate, npcName))
+        {
+            return "Roommate";
+        }
+
+        if (IsListed(state.SpouseName, npcName)
+            || IsListed(state.Spouse, npcName)
+            || IsListed(state.MarriedTo, npcName)
+            || IsListed(state.Spouses, npcName))
+        {
+            return "Married";
+        }
+
+        if (IsListed(state.EngagedTo, npcName))
+        {
+            return "Engaged";
+        }
+
+        if (state.DatingNpcNames.Contains(npcName))
+        {
+            return "Dating";
+        }
+
+        return state.FriendshipPoints.ContainsKey(npcName)
+            ? "Friendly"
+            : null;
+    }
+
+    private static bool IsListed(string? value, string expected)
+    {
+        return !string.IsNullOrWhiteSpace(value)
+            && string.Equals(value.Trim(), expected, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsListed(IEnumerable<string>? values, string expected)
+    {
+        return values is not null
+            && values.Any(value => string.Equals(value.Trim(), expected, StringComparison.OrdinalIgnoreCase));
     }
 
     private ConditionAtomResult EvaluateNpcVisibleHereAtom(string raw, IReadOnlyList<string> values, RuntimeGameState state)
@@ -470,6 +643,36 @@ public sealed class ConditionEvaluator
                 ? $"Dialogue answer matched: player has all of [{string.Join(", ", values)}]"
                 : $"Dialogue answer failed: player has [{string.Join(", ", matchedIds)}], requires [{string.Join(", ", values)}]"
         );
+    }
+
+    private ConditionAtomResult EvaluateActiveDialogueEventAtom(string raw, IReadOnlyList<string> values, RuntimeGameState state)
+    {
+        if (values.Count == 0)
+        {
+            return this.CreateUnknownAtomResult(raw, "ActiveDialogueEvent", "ActiveDialogueEvent condition has no topic id.");
+        }
+
+        var topic = values[0];
+        if (state.ActiveDialogueEventsKnown)
+        {
+            var isActive = state.ActiveDialogueEvents.Contains(topic);
+            return this.CreateAtomResult(
+                raw,
+                "ActiveDialogueEvent",
+                isActive,
+                isActive
+                    ? $"ActiveDialogueEvent matched: topic '{topic}' is currently active."
+                    : $"ActiveDialogueEvent failed: topic '{topic}' is not currently active.");
+        }
+
+        var inRecordedTopics = state.DialogueAnswers.Contains(topic);
+        return this.CreateAtomResult(
+            raw,
+            "ActiveDialogueEvent",
+            inRecordedTopics,
+            inRecordedTopics
+                ? $"ActiveDialogueEvent conservative match: topic '{topic}' appears in exported dialogue/topic records."
+                : $"ActiveDialogueEvent conservative match: topic '{topic}' not found in exported dialogue/topic records.");
     }
 
     private ConditionAtomResult CreateAtomResult(string raw, string atomType, bool passed, string reason)

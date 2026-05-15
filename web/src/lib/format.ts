@@ -41,6 +41,12 @@ export function formatStatusLabel(status?: StoryNodeStatus | null): string {
       return "前置未满足";
     case "Unknown":
       return "条件未知";
+    case "NonTriggerable":
+      return "非可触发";
+    case "BranchTarget":
+      return "分支目标";
+    case "SpecialEvent":
+      return "特殊事件";
     default:
       return "条件未知";
   }
@@ -96,6 +102,10 @@ export function formatStatusReasonZh(
 
   if (reason.startsWith("Context conditions not currently met:")) {
     return `当前上下文不满足：${reason.replace("Context conditions not currently met:", "").trim()}`;
+  }
+
+  if (reason.startsWith("Runtime state missing for patch When:")) {
+    return `运行时状态缺失：${reason.replace("Runtime state missing for patch When:", "").replace("Cannot safely determine status.", "").trim()}`;
   }
 
   if (reason.startsWith("Patch-level When conditions are not evaluated:")) {

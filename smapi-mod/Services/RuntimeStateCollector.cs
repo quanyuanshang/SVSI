@@ -29,6 +29,9 @@ public sealed class RuntimeStateCollector
         var currentLocation = GetStaticMemberValue(game1Type, "currentLocation");
         var relationships = CollectRelationships(player);
 
+        var dayEventsSnapshot = CollectDayEvents(game1Type);
+        var activeDialogueSnapshot = CollectActiveDialogueEvents(player);
+
         return new RuntimeGameState
         {
             Year = GetStaticInt(game1Type, "year"),
@@ -37,6 +40,9 @@ public sealed class RuntimeStateCollector
             DayOfWeek = ComputeDayOfWeek(season, dayOfMonth),
             Time = GetStaticInt(game1Type, "timeOfDay"),
             Weather = DetermineWeather(game1Type),
+            IsFestivalDay = DetermineIsFestivalDay(game1Type),
+            DayEventsKnown = dayEventsSnapshot.Known,
+            DayEvents = dayEventsSnapshot.Events,
             CurrentLocation = GetLocationName(currentLocation),
             PlayerName = GetStringMemberValue(player, "Name", "name"),
             InstalledModIds = CollectInstalledModIds(this.modRegistry),
@@ -57,8 +63,85 @@ public sealed class RuntimeStateCollector
                 "dialogueQuestionsAnswered",
                 "dialogueQuestionsAnsweredThisSeason",
                 "dialogueAnswers"
-            )
+            ),
+            ActiveDialogueEventsKnown = activeDialogueSnapshot.Known,
+            ActiveDialogueEvents = activeDialogueSnapshot.Events
         };
+    }
+
+    private static ActiveDialogueSnapshot CollectActiveDialogueEvents(object? player)
+    {
+        var events = new HashSet<string>(StringComparer.Ordinal);
+        var activeDialogueEvents = GetMemberValue(player, "activeDialogueEvents");
+        if (activeDialogueEvents is null)
+        {
+            return new ActiveDialogueSnapshot { Known = false, Events = events };
+        }
+
+        if (TryCollectDictionaryKeys(activeDialogueEvents, events) || TryCollectEnumerableStrings(activeDialogueEvents, events))
+        {
+            return new ActiveDialogueSnapshot { Known = true, Events = events };
+        }
+
+        return new ActiveDialogueSnapshot { Known = false, Events = events };
+    }
+
+    private static bool TryCollectDictionaryKeys(object source, ISet<string> sink)
+    {
+        if (source is not IEnumerable enumerable)
+        {
+            return false;
+        }
+
+        var added = false;
+        foreach (var item in enumerable)
+        {
+            if (item is null)
+            {
+                continue;
+            }
+
+            var itemType = item.GetType();
+            if (itemType.IsGenericType && itemType.GetGenericTypeDefinition() == typeof(KeyValuePair<,>))
+            {
+                var key = ConvertToString(itemType.GetProperty("Key")?.GetValue(item));
+                if (!string.IsNullOrWhiteSpace(key))
+                {
+                    sink.Add(key.Trim());
+                    added = true;
+                }
+            }
+        }
+
+        return added;
+    }
+
+    private static bool TryCollectEnumerableStrings(object source, ISet<string> sink)
+    {
+        if (source is not IEnumerable enumerable)
+        {
+            return false;
+        }
+
+        var added = false;
+        foreach (var item in enumerable)
+        {
+            var value = ConvertToString(item);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                sink.Add(value.Trim());
+                added = true;
+            }
+        }
+
+        return added;
+    }
+
+    private sealed class ActiveDialogueSnapshot
+    {
+        public bool Known { get; init; }
+
+        public HashSet<string> Events { get; init; } = new(StringComparer.Ordinal);
     }
 
     private static HashSet<string> CollectInstalledModIds(IModRegistry? modRegistry)
@@ -71,9 +154,13 @@ public sealed class RuntimeStateCollector
 
         foreach (var mod in modRegistry.GetAll())
         {
-            if (!string.IsNullOrWhiteSpace(mod.Manifest.UniqueID))
+            // Avoid IManifest (SMAPI.Toolkit.CoreInterfaces) — project only references
+            // StardewModdingAPI.dll; read UniqueID via reflection like other runtime probes.
+            var manifest = GetMemberValue(mod, "Manifest");
+            var uniqueId = ConvertToString(GetMemberValue(manifest, "UniqueID"));
+            if (!string.IsNullOrWhiteSpace(uniqueId))
             {
-                results.Add(mod.Manifest.UniqueID.Trim());
+                results.Add(uniqueId.Trim());
             }
         }
 
@@ -509,6 +596,33 @@ public sealed class RuntimeStateCollector
         return "sunny";
     }
 
+    private static bool? DetermineIsFestivalDay(Type game1Type)
+    {
+        if (TryGetStaticBool(game1Type, out var value, "isFestival", "IsFestival"))
+        {
+            return value;
+        }
+
+        return null;
+    }
+
+    private static (bool Known, List<string> Events) CollectDayEvents(Type game1Type)
+    {
+        var results = new List<string>();
+
+        if (TryGetStaticBool(game1Type, out var isWeddingDay, "weddingToday", "isWeddingDay", "IsWeddingDay"))
+        {
+            if (isWeddingDay)
+            {
+                results.Add("wedding");
+            }
+
+            return (true, results);
+        }
+
+        return (false, results);
+    }
+
     private static string ComputeDayOfWeek(string season, int dayOfMonth)
     {
         var seasonIndex = season.ToLowerInvariant() switch
@@ -561,6 +675,21 @@ public sealed class RuntimeStateCollector
 
         var wrappedValue = GetMemberValue(value, "Value");
         return wrappedValue is bool wrappedBoolean && wrappedBoolean;
+    }
+
+    private static bool TryGetStaticBool(Type type, out bool value, params string[] memberNames)
+    {
+        foreach (var memberName in memberNames)
+        {
+            var rawValue = GetStaticMemberValue(type, memberName);
+            if (TryConvertToBool(rawValue, out value))
+            {
+                return true;
+            }
+        }
+
+        value = false;
+        return false;
     }
 
     private static object? GetStaticMemberValue(Type type, string memberName)
@@ -723,6 +852,25 @@ public sealed class RuntimeStateCollector
     private static string ConvertToString(object? value)
     {
         return value?.ToString() ?? string.Empty;
+    }
+
+    private static bool TryConvertToBool(object? value, out bool parsed)
+    {
+        if (value is bool boolValue)
+        {
+            parsed = boolValue;
+            return true;
+        }
+
+        var unwrappedValue = UnwrapNetValue(value);
+        if (unwrappedValue is bool unwrappedBool)
+        {
+            parsed = unwrappedBool;
+            return true;
+        }
+
+        parsed = false;
+        return false;
     }
 
     private static string? NormalizeOptionalName(string? value)

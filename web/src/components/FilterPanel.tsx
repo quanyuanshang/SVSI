@@ -1,5 +1,5 @@
 import { formatStatusLabel } from "../lib/format";
-import { translateCharacter, translateLocation } from "../lib/translations";
+import { formatNpcFilterLabel, translateLocation } from "../lib/translations";
 import type {
   StoryFilterOptions,
   StoryFilterState,
@@ -109,7 +109,7 @@ export function FilterPanel({
         label="角色"
         options={availableOptions.npcNames}
         selectedOptions={filters.selectedNpcNames}
-        renderOption={(value) => translateCharacter(value).zh}
+        renderOption={(value) => formatNpcFilterLabel(value)}
         onToggleOption={onToggleNpcName}
       />
     </aside>

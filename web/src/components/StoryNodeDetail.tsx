@@ -350,10 +350,24 @@ export function StoryNodeDetail({
                 <li className="atom-result-card" key={`${condition.key ?? "when"}-${index}`}>
                   <div className="atom-result-card__header">
                     <strong>{condition.key ?? "未知键"}</strong>
-                    <span>{condition.isKnown ? "已解析" : "未解析"}</span>
+                    <span>
+                      {condition.isKnown
+                        ? "已评估"
+                        : condition.unknownKind === "runtimeMissing"
+                          ? "无法判断"
+                          : condition.unknownKind === "complexQueryUnsupported"
+                            ? "复杂 Query"
+                            : "未解析"}
+                    </span>
                   </div>
                   <p className="atom-result-card__reason">
-                    {condition.reason ?? "该 CP When 条件暂未支持静态评估。"}
+                    {condition.isKnown
+                      ? condition.reasonZh ?? condition.reason ?? "已评估。"
+                      : condition.unknownKind === "runtimeMissing"
+                        ? `无法判断：${condition.reasonZh ?? condition.reason ?? "运行时状态缺失"}`
+                        : condition.unknownKind === "complexQueryUnsupported"
+                          ? "复杂 CP Query，暂未展开"
+                          : `未解析条件：${condition.key ?? "When"}`}
                   </p>
                   <p className="atom-result-card__raw">
                     Raw value：{condition.value ?? condition.rawValue ?? "无原始值"}

@@ -32,6 +32,7 @@
     <Compile Include="..\smapi-mod\Models\ContentPackReference.cs" Link="Linked\Models\ContentPackReference.cs" />
     <Compile Include="..\smapi-mod\Models\DialogueIndex.cs" Link="Linked\Models\DialogueIndex.cs" />
     <Compile Include="..\smapi-mod\Models\DialogueIndexEntry.cs" Link="Linked\Models\DialogueIndexEntry.cs" />
+    <Compile Include="..\smapi-mod\Models\DynamicTokenDefinition.cs" Link="Linked\Models\DynamicTokenDefinition.cs" />
     <Compile Include="..\smapi-mod\Models\EventHistoryReport.cs" Link="Linked\Models\EventHistoryReport.cs" />
     <Compile Include="..\smapi-mod\Models\EventScriptChoiceIndex.cs" Link="Linked\Models\EventScriptChoiceIndex.cs" />
     <Compile Include="..\smapi-mod\Models\EventScriptChoiceEntry.cs" Link="Linked\Models\EventScriptChoiceEntry.cs" />
@@ -50,11 +51,13 @@
     <Compile Include="..\smapi-mod\Models\SaveIdentity.cs" Link="Linked\Models\SaveIdentity.cs" />
     <Compile Include="..\smapi-mod\Models\ScannedMod.cs" Link="Linked\Models\ScannedMod.cs" />
     <Compile Include="..\smapi-mod\Models\StoryNode.cs" Link="Linked\Models\StoryNode.cs" />
+    <Compile Include="..\smapi-mod\Models\StoryNodeEventKind.cs" Link="Linked\Models\StoryNodeEventKind.cs" />
     <Compile Include="..\smapi-mod\Models\StoryNodeEvaluation.cs" Link="Linked\Models\StoryNodeEvaluation.cs" />
     <Compile Include="..\smapi-mod\Models\StoryStateEvaluationReport.cs" Link="Linked\Models\StoryStateEvaluationReport.cs" />
     <Compile Include="..\smapi-mod\Models\StoryNodeStatus.cs" Link="Linked\Models\StoryNodeStatus.cs" />
     <Compile Include="..\smapi-mod\Models\StoryRawEventIndex.cs" Link="Linked\Models\StoryRawEventIndex.cs" />
     <Compile Include="..\smapi-mod\Models\TranslationCatalog.cs" Link="Linked\Models\TranslationCatalog.cs" />
+    <Compile Include="..\smapi-mod\Models\UnknownConditionSummary.cs" Link="Linked\Models\UnknownConditionSummary.cs" />
     <Compile Include="..\smapi-mod\Services\DialogueIndexParser.cs" Link="Linked\Services\DialogueIndexParser.cs" />
     <Compile Include="..\smapi-mod\Services\ConditionEvaluator.cs" Link="Linked\Services\ConditionEvaluator.cs" />
     <Compile Include="..\smapi-mod\Services\EventHistoryStore.cs" Link="Linked\Services\EventHistoryStore.cs" />

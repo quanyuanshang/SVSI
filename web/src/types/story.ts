@@ -3,7 +3,17 @@ export type StoryNodeStatus =
   | "Current"
   | "AvailableLater"
   | "Locked"
-  | "Unknown";
+  | "Unknown"
+  | "NonTriggerable"
+  | "BranchTarget"
+  | "SpecialEvent";
+
+export type StoryNodeEventKind =
+  | "RegularLocationEvent"
+  | "BranchTarget"
+  | "SpecialGameEvent"
+  | "DialogueOnly"
+  | "InvalidOrUnsupported";
 
 export interface RuntimeGameState {
   year: number;
@@ -12,6 +22,7 @@ export interface RuntimeGameState {
   dayOfWeek: string;
   time: number;
   weather: string;
+  isFestivalDay?: boolean | null;
   currentLocation: string;
   playerName: string;
   installedModIds?: string[];
@@ -28,6 +39,10 @@ export interface RuntimeGameState {
   seenEvents: string[];
   mail: string[];
   dialogueAnswers: string[];
+  activeDialogueEventsKnown?: boolean;
+  activeDialogueEvents?: string[];
+  dayEventsKnown?: boolean;
+  dayEvents?: string[];
 }
 
 export interface TranslationEntry {
@@ -93,8 +108,12 @@ export interface PatchWhenCondition {
   rawValue?: string;
   isKnown?: boolean;
   passed?: boolean | null;
+  isContextSensitive?: boolean;
   isProgressionSensitive?: boolean;
   reason?: string;
+  unknownKind?: string;
+  reasonZh?: string;
+  parsedType?: string;
 }
 
 export interface ConditionEvaluationResult {
@@ -107,6 +126,7 @@ export interface ConditionEvaluationResult {
 export interface StoryNodeEvaluation {
   nodeId?: string;
   eventId?: string;
+  eventKind?: StoryNodeEventKind;
   sourceModId?: string;
   sourceModName?: string;
   location?: string;
@@ -123,12 +143,21 @@ export interface StoryNodeEvaluation {
   relatedEventChoiceRefs?: RelatedEventChoiceRef[];
 }
 
+export interface UnknownConditionSummary {
+  raw?: string;
+  count?: number;
+  sourceFiles?: string[];
+  exampleEvents?: string[];
+  suggestedParserType?: string;
+}
+
 export interface StoryStateEvaluationReport {
   generatedAtUtc?: string;
   runtimeState?: RuntimeGameState;
   translationCatalog?: TranslationCatalog;
   totalNodeCount?: number;
   statusCounts?: Partial<Record<StoryNodeStatus, number>>;
+  unknownConditions?: UnknownConditionSummary[];
   nodes?: StoryNodeEvaluation[];
 }
 
@@ -138,6 +167,7 @@ export interface StoryFilterState {
   selectedLocations: Set<string>;
   selectedNpcNames: Set<string>;
   hideTriggered: boolean;
+  hideNonTriggerable: boolean;
   searchText: string;
 }
 

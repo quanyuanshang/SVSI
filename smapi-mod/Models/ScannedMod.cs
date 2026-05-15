@@ -33,4 +33,8 @@ public sealed class ScannedMod
     public string? ContentJsonError { get; init; }
 
     public string? ScanError { get; init; }
+
+    public string? ConfigPath { get; init; }
+
+    public Dictionary<string, string> ConfigValues { get; init; } = new(StringComparer.OrdinalIgnoreCase);
 }

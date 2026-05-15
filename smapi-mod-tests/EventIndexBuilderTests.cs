@@ -11,6 +11,9 @@ internal static class EventIndexBuilderTests
         Build_ExtractsTwoNodes_FromMockContentJson();
         Build_ExtractsNodes_FromIncludedChanges();
         Build_CapturesPatchWhenConditions();
+        Build_ExpandsDynamicTokenPreconditions_WithoutMarkingUnknown();
+        Build_CollectsDynamicTokensFromIncludes();
+        Build_IgnoresNonStringDynamicTokenValuesWithoutThrowing();
         Build_SkipsBranchOnlyEventEntries();
         Build_DeduplicatesOverriddenEventKeysWithinLocation();
         Build_SkipsAnswerIdAfterForkEventIdAnswerId();
@@ -169,6 +172,77 @@ internal static class EventIndexBuilderTests
         AssertEqual("Relationship:Alex", node.PatchWhenConditions[0].Key, "Patch When key mismatch.");
         AssertEqual("Engaged", node.PatchWhenConditions[0].Value, "Patch When value mismatch.");
         AssertTrue(!node.PatchWhenConditions[0].IsKnown, "Patch When should be marked unknown until evaluated.");
+    }
+
+    private static void Build_ExpandsDynamicTokenPreconditions_WithoutMarkingUnknown()
+    {
+        var scannedMod = CreateScannedMod(
+            "Dynamic Token Pack",
+            "Tests.DynamicTokenPack",
+            "{ \"DynamicTokens\": [ " +
+            "{ \"Name\": \"CampoutDays\", \"Value\": \"Season spring/u 12 19 20\", \"When\": { \"Season\": \"spring\" } }, " +
+            "{ \"Name\": \"CampoutDays\", \"Value\": \"!Season summer\", \"When\": { \"Season\": \"summer\" } }, " +
+            "{ \"Name\": \"CampoutDays\", \"Value\": \"Season fall/u 13 14 18\", \"When\": { \"Season\": \"fall\" } }, " +
+            "{ \"Name\": \"CampoutDays\", \"Value\": \"!Season winter\", \"When\": { \"Season\": \"winter\" } } " +
+            "], \"Changes\": [ { \"Action\": \"EditData\", \"Target\": \"Data/Events/Forest\", \"Entries\": { \"700001/{{CampoutDays}}\": \"event script\" } } ] }"
+        );
+
+        var result = new EventIndexBuilder().Build(new[] { scannedMod });
+        var node = result.Nodes.Single();
+
+        AssertEqual(0, node.UnknownFragments.Count, "Dynamic token precondition should not be treated as unknown.");
+        AssertSequenceEqual(new[] { "{{CampoutDays}}" }, node.RawPreconditions, "Raw preconditions should preserve the original token.");
+        AssertEqual("AnyOf", node.ConditionAst.Children.Single().Type, "CampoutDays should expand into seasonal alternatives.");
+    }
+
+    private static void Build_CollectsDynamicTokensFromIncludes()
+    {
+        var scannedMod = CreateScannedMod(
+            "Included Dynamic Tokens",
+            "Tests.IncludedDynamicTokens",
+            "{ \"Changes\": [ " +
+            "{ \"Action\": \"Include\", \"FromFile\": \"tokens.json\" }, " +
+            "{ \"Action\": \"EditData\", \"Target\": \"Data/Events/Forest\", \"Entries\": { " +
+            "\"710001/{{FrogDays}}\": \"event script\", " +
+            "\"710002/{{MineDays}}\": \"event script\", " +
+            "\"710003/{{OverlookDays}}\": \"event script\", " +
+            "\"710004/{{PoolDays}}\": \"event script\", " +
+            "\"710005/{{CampoutDays}}\": \"event script\" " +
+            "} } ] }"
+        );
+        File.WriteAllText(
+            Path.Combine(scannedMod.DirectoryPath, "tokens.json"),
+            "{ \"DynamicTokens\": [ " +
+            "{ \"Name\": \"FrogDays\", \"Value\": \"Season spring/u 1\" }, " +
+            "{ \"Name\": \"MineDays\", \"Value\": \"Season summer/u 2\" }, " +
+            "{ \"Name\": \"OverlookDays\", \"Value\": \"Season fall/u 3\" }, " +
+            "{ \"Name\": \"PoolDays\", \"Value\": \"Season winter/u 4\" }, " +
+            "{ \"Name\": \"CampoutDays\", \"Value\": \"Season spring/u 12 19 20\" } " +
+            "] }"
+        );
+
+        var result = new EventIndexBuilder().Build(new[] { scannedMod });
+
+        AssertEqual(5, result.NodeCount, "Every included DynamicToken event should be indexed.");
+        AssertTrue(result.Nodes.All(node => node.UnknownFragments.Count == 0), "Included DynamicToken refs should not become unknown.");
+        AssertTrue(
+            result.Nodes.All(node => node.ConditionAst.Children.Single().Type != "Unknown"),
+            "Included DynamicToken refs should expand into parsed conditions."
+        );
+    }
+
+    private static void Build_IgnoresNonStringDynamicTokenValuesWithoutThrowing()
+    {
+        var scannedMod = CreateScannedMod(
+            "Boolean Dynamic Token",
+            "Tests.BooleanDynamicToken",
+            "{ \"DynamicTokens\": [ { \"Name\": \"SkipMe\", \"Value\": false } ], " +
+            "\"Changes\": [ { \"Action\": \"EditData\", \"Target\": \"Data/Events/Farm\", \"Entries\": { \"720001/t 600 700\": \"event script\" } } ] }"
+        );
+
+        var result = new EventIndexBuilder().Build(new[] { scannedMod });
+
+        AssertEqual(1, result.NodeCount, "Boolean-valued DynamicTokens should not crash event indexing.");
     }
 
     private static void Build_SkipsBranchOnlyEventEntries()
