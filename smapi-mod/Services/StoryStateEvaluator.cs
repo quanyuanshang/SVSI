@@ -255,12 +255,17 @@ public sealed class StoryStateEvaluator
     {
         condition = NormalizePatchWhenCondition(condition);
 
+        if (TryEvaluateFamilyStateCondition(condition, state, out var familyStateEvaluation))
+        {
+            return familyStateEvaluation;
+        }
+
         if (TryClassifyKnownUnsupportedPatchWhen(condition, out var classifiedUnsupported))
         {
             return classifiedUnsupported;
         }
 
-        if (TryEvaluateYearsMarriedCustomTokenPatchWhen(condition, out var yearsMarriedEvaluation))
+        if (TryEvaluateYearsMarriedCustomTokenPatchWhen(condition, state, out var yearsMarriedEvaluation))
         {
             return yearsMarriedEvaluation;
         }
@@ -300,9 +305,24 @@ public sealed class StoryStateEvaluator
             return conversationTopicEvaluation;
         }
 
+        if (TryEvaluateHasDialogueAnswerCondition(condition, state, out var dialogueAnswerEvaluation))
+        {
+            return dialogueAnswerEvaluation;
+        }
+
+        if (TryEvaluateHasActiveQuestCondition(condition, state, out var activeQuestEvaluation))
+        {
+            return activeQuestEvaluation;
+        }
+
         if (TryEvaluateHasFlagCondition(condition, state, out var hasFlagEvaluation))
         {
             return hasFlagEvaluation;
+        }
+
+        if (TryEvaluateSimpleRuntimeValueCondition(condition, state, out var simpleRuntimeEvaluation))
+        {
+            return simpleRuntimeEvaluation;
         }
 
         if (TryEvaluateSeasonCondition(condition, state, out var seasonEvaluation))
@@ -451,14 +471,21 @@ public sealed class StoryStateEvaluator
 
         if (!TryParseTokenAndModifier(condition.Key, out var token, out _, out var modifierOperator, out var modifierValue)
             || !string.Equals(token, "Spouse", StringComparison.OrdinalIgnoreCase)
-            || !string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase)
-            || string.IsNullOrWhiteSpace(modifierValue))
+            || (!string.IsNullOrWhiteSpace(modifierOperator)
+                && !string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase)))
         {
             return false;
         }
 
         var expectedSpouse = TryParseBoolean(condition.Value, out var parsedBool) ? parsedBool : true;
-        var candidates = SplitCsv(modifierValue);
+        var candidates = string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase)
+            ? SplitCsv(modifierValue)
+            : SplitCsv(condition.Value);
+        if (candidates.Count == 0)
+        {
+            return false;
+        }
+
         var matched = candidates
             .Where(candidate => IsListed(state.SpouseName, candidate)
                 || IsListed(state.Spouse, candidate)
@@ -467,7 +494,9 @@ public sealed class StoryStateEvaluator
                 || IsListed(state.EngagedTo, candidate))
             .ToList();
         var hasAny = matched.Count > 0;
-        var passed = hasAny == expectedSpouse;
+        var passed = string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase)
+            ? hasAny == expectedSpouse
+            : hasAny;
         evaluated = CreateEvaluatedPatchWhenCondition(
             condition,
             passed,
@@ -578,6 +607,116 @@ public sealed class StoryStateEvaluator
         return true;
     }
 
+    private static bool TryEvaluateHasDialogueAnswerCondition(
+        PatchWhenCondition condition,
+        RuntimeGameState state,
+        out PatchWhenCondition evaluated)
+    {
+        evaluated = condition;
+
+        if (!TryParseTokenAndModifier(condition.Key, out var token, out var argument, out var modifierOperator, out var modifierValue)
+            || !string.Equals(token, "HasDialogueAnswer", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var candidateIds = string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase)
+            ? SplitCsv(modifierValue)
+            : SplitCsv(string.IsNullOrWhiteSpace(argument) ? condition.Value : argument);
+        if (candidateIds.Count == 0)
+        {
+            return false;
+        }
+
+        if (!state.DialogueAnswersKnown)
+        {
+            evaluated = CreateUnknownPatchWhenCondition(
+                condition,
+                "Dialogue answer runtime export is unavailable.",
+                unknownKind: "runtimeMissing",
+                reasonZh: "运行时未导出对话选项记录。",
+                parsedType: "cpHasDialogueAnswer");
+            return true;
+        }
+
+        var answerIds = state.DialogueAnswerIds.Count > 0 ? state.DialogueAnswerIds : state.DialogueAnswers;
+        var matchedIds = candidateIds.Where(candidate => answerIds.Contains(candidate)).ToList();
+        var hasAny = matchedIds.Count > 0;
+        var expected = TryParseBoolean(condition.Value, out var parsedExpected)
+            ? parsedExpected
+            : true;
+        var passed = hasAny == expected;
+        evaluated = CreateEvaluatedPatchWhenCondition(
+            condition,
+            passed,
+            hasAny
+                ? $"HasDialogueAnswer matched: found [{string.Join(", ", matchedIds)}]."
+                : "HasDialogueAnswer matched: no candidate answers are recorded.",
+            hasAny
+                ? $"HasDialogueAnswer failed: found [{string.Join(", ", matchedIds)}]."
+                : $"HasDialogueAnswer failed: none of [{string.Join(", ", candidateIds)}] are recorded.",
+            isProgressionSensitive: true,
+            reasonZh: passed
+                ? $"对话选项记录条件已满足：{string.Join("、", candidateIds)}。"
+                : $"对话选项记录条件不满足：需要 {string.Join("、", candidateIds)}。");
+        return true;
+    }
+
+    private static bool TryEvaluateHasActiveQuestCondition(
+        PatchWhenCondition condition,
+        RuntimeGameState state,
+        out PatchWhenCondition evaluated)
+    {
+        evaluated = condition;
+
+        if (!TryParseTokenAndModifier(condition.Key, out var token, out var argument, out var modifierOperator, out var modifierValue)
+            || !string.Equals(token, "HasActiveQuest", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var candidateIds = string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase)
+            ? SplitCsv(modifierValue)
+            : SplitCsv(string.IsNullOrWhiteSpace(argument) ? condition.Value : argument);
+        if (candidateIds.Count == 0)
+        {
+            return false;
+        }
+
+        if (!state.ActiveQuestsKnown)
+        {
+            evaluated = CreateUnknownPatchWhenCondition(
+                condition,
+                "Active quest runtime export is unavailable.",
+                unknownKind: "runtimeMissing",
+                reasonZh: "\u8fd0\u884c\u65f6\u672a\u5bfc\u51fa\u8fdb\u884c\u4e2d\u4efb\u52a1\u8bb0\u5f55\u3002",
+                parsedType: "cpHasActiveQuest");
+            return true;
+        }
+
+        var matchedIds = candidateIds.Where(candidate => state.ActiveQuestIds.Contains(candidate)).ToList();
+        var hasAny = matchedIds.Count > 0;
+        var expected = TryParseBoolean(condition.Value, out var parsedExpected)
+            ? parsedExpected
+            : true;
+        var passed = hasAny == expected;
+        evaluated = CreateEvaluatedPatchWhenCondition(
+            condition,
+            passed,
+            hasAny
+                ? $"HasActiveQuest matched: found [{string.Join(", ", matchedIds)}]."
+                : "HasActiveQuest matched: no candidate active quests are recorded.",
+            hasAny
+                ? $"HasActiveQuest failed: found [{string.Join(", ", matchedIds)}]."
+                : $"HasActiveQuest failed: none of [{string.Join(", ", candidateIds)}] are active.",
+            isProgressionSensitive: true,
+            parsedType: "cpHasActiveQuest",
+            reasonZh: passed
+                ? $"\u8fdb\u884c\u4e2d\u4efb\u52a1\u6761\u4ef6\u5df2\u6ee1\u8db3\uff1a{string.Join("\u3001", candidateIds)}\u3002"
+                : $"\u8fdb\u884c\u4e2d\u4efb\u52a1\u6761\u4ef6\u4e0d\u6ee1\u8db3\uff1a\u9700\u8981 {string.Join("\u3001", candidateIds)}\u3002");
+        return true;
+    }
+
     private static bool TryEvaluateHasFlagCondition(
         PatchWhenCondition condition,
         RuntimeGameState state,
@@ -607,6 +746,170 @@ public sealed class StoryStateEvaluator
                 : $"HasFlag failed: none of [{string.Join(", ", flags)}] are present.",
             isProgressionSensitive: true);
         return true;
+    }
+
+    private static bool TryEvaluateSimpleRuntimeValueCondition(
+        PatchWhenCondition condition,
+        RuntimeGameState state,
+        out PatchWhenCondition evaluated)
+    {
+        evaluated = condition;
+        if (!TryParseTokenAndModifier(condition.Key, out var token, out var argument, out var modifierOperator, out var modifierValue))
+        {
+            return false;
+        }
+
+        if (string.Equals(token, "HasValue", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(argument, "{{spouse}}", StringComparison.OrdinalIgnoreCase))
+        {
+            var hasSpouse = !string.IsNullOrWhiteSpace(state.SpouseName)
+                || !string.IsNullOrWhiteSpace(state.Spouse)
+                || !string.IsNullOrWhiteSpace(state.MarriedTo)
+                || state.Spouses is { Length: > 0 };
+            var expected = TryParseBoolean(condition.Value, out var parsedExpected) ? parsedExpected : true;
+            var passed = hasSpouse == expected;
+            evaluated = CreateEvaluatedPatchWhenCondition(
+                condition,
+                passed,
+                $"HasValue spouse matched: hasSpouse={hasSpouse}.",
+                $"HasValue spouse failed: hasSpouse={hasSpouse}.",
+                isProgressionSensitive: true);
+            return true;
+        }
+
+        if (string.Equals(token, "IsMainPlayer", StringComparison.OrdinalIgnoreCase))
+        {
+            var expected = TryParseBoolean(condition.Value, out var parsedExpected) ? parsedExpected : true;
+            var passed = expected;
+            evaluated = CreateEvaluatedPatchWhenCondition(
+                condition,
+                passed,
+                "IsMainPlayer matched: runtime export is for the current/main player.",
+                "IsMainPlayer failed: runtime export is for the current/main player.",
+                isProgressionSensitive: false);
+            return true;
+        }
+
+        if (string.Equals(token, "Day", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(token, "DayOfMonth", StringComparison.OrdinalIgnoreCase))
+        {
+            var values = string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase)
+                ? SplitCsv(modifierValue)
+                : SplitCsv(condition.Value);
+            var days = values
+                .Select(value => int.TryParse(value, out var parsed) ? parsed : (int?)null)
+                .Where(value => value.HasValue)
+                .Select(value => value!.Value)
+                .ToList();
+            if (days.Count == 0)
+            {
+                return false;
+            }
+
+            var contains = days.Contains(state.DayOfMonth);
+            var expected = string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase)
+                ? (TryParseBoolean(condition.Value, out var parsedExpected) ? parsedExpected : true)
+                : true;
+            var passed = contains == expected;
+            evaluated = CreateEvaluatedPatchWhenCondition(
+                condition,
+                passed,
+                $"Day matched: current day {state.DayOfMonth}.",
+                $"Day failed: current day {state.DayOfMonth}.",
+                isContextSensitive: true);
+            return true;
+        }
+
+        if (string.Equals(token, "Year", StringComparison.OrdinalIgnoreCase))
+        {
+            var values = string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase)
+                ? SplitCsv(modifierValue)
+                : SplitCsv(condition.Value);
+            var years = values
+                .Select(value => int.TryParse(value, out var parsed) ? parsed : (int?)null)
+                .Where(value => value.HasValue)
+                .Select(value => value!.Value)
+                .ToList();
+            if (years.Count == 0)
+            {
+                return false;
+            }
+
+            var contains = years.Contains(state.Year);
+            var expected = string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase)
+                ? (TryParseBoolean(condition.Value, out var parsedExpected) ? parsedExpected : true)
+                : true;
+            var passed = contains == expected;
+            evaluated = CreateEvaluatedPatchWhenCondition(
+                condition,
+                passed,
+                $"Year matched: current year {state.Year}.",
+                $"Year failed: current year {state.Year}.",
+                isContextSensitive: true);
+            return true;
+        }
+
+        if (string.Equals(token, "Weather", StringComparison.OrdinalIgnoreCase))
+        {
+            var values = string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase)
+                ? SplitCsv(modifierValue)
+                : SplitCsv(condition.Value);
+            if (values.Count == 0)
+            {
+                return false;
+            }
+
+            var contains = values.Any(value =>
+                string.Equals(NormalizeWeatherValue(value), NormalizeWeatherValue(state.Weather), StringComparison.OrdinalIgnoreCase));
+            var expected = string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase)
+                ? (TryParseBoolean(condition.Value, out var parsedExpected) ? parsedExpected : true)
+                : true;
+            var passed = contains == expected;
+            evaluated = CreateEvaluatedPatchWhenCondition(
+                condition,
+                passed,
+                $"Weather matched: current weather {state.Weather}.",
+                $"Weather failed: current weather {state.Weather}.",
+                isContextSensitive: true);
+            return true;
+        }
+
+        if (string.Equals(token, "DayOfWeek", StringComparison.OrdinalIgnoreCase))
+        {
+            var values = string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase)
+                ? SplitCsv(modifierValue)
+                : SplitCsv(condition.Value);
+            if (values.Count == 0)
+            {
+                return false;
+            }
+
+            var contains = values.Any(value => string.Equals(value, state.DayOfWeek, StringComparison.OrdinalIgnoreCase));
+            var expected = string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase)
+                ? (TryParseBoolean(condition.Value, out var parsedExpected) ? parsedExpected : true)
+                : true;
+            var passed = contains == expected;
+            evaluated = CreateEvaluatedPatchWhenCondition(
+                condition,
+                passed,
+                $"DayOfWeek matched: current weekday {state.DayOfWeek}.",
+                $"DayOfWeek failed: current weekday {state.DayOfWeek}.",
+                isContextSensitive: true);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string NormalizeWeatherValue(string value)
+    {
+        return value.Trim().ToLowerInvariant() switch
+        {
+            "rain" => "rainy",
+            "sun" => "sunny",
+            "snow" => "snowy",
+            _ => value.Trim()
+        };
     }
 
     private static bool TryEvaluateSeasonCondition(
@@ -805,17 +1108,22 @@ public sealed class StoryStateEvaluator
 
         if (string.IsNullOrWhiteSpace(modOp))
         {
-            if (!int.TryParse(condition.Value.Trim(), out var wantLevel))
+            var expectedLevels = SplitCsv(condition.Value)
+                .Select(part => int.TryParse(part.Trim(), out var parsedLevel) ? parsedLevel : (int?)null)
+                .Where(parsedLevel => parsedLevel.HasValue)
+                .Select(parsedLevel => parsedLevel!.Value)
+                .ToList();
+            if (expectedLevels.Count == 0)
             {
                 return false;
             }
 
-            var passedExact = level == wantLevel;
+            var passedExact = expectedLevels.Contains(level);
             evaluated = CreateEvaluatedPatchWhenCondition(
                 condition,
                 passedExact,
                 $"FarmhouseUpgrade matched: level is {level}.",
-                $"FarmhouseUpgrade failed: level is {level}, expected {wantLevel}.",
+                $"FarmhouseUpgrade failed: level is {level}, expected one of [{string.Join(", ", expectedLevels)}].",
                 isContextSensitive: false,
                 isProgressionSensitive: true);
             return true;
@@ -855,6 +1163,7 @@ public sealed class StoryStateEvaluator
 
     private static bool TryEvaluateYearsMarriedCustomTokenPatchWhen(
         PatchWhenCondition condition,
+        RuntimeGameState state,
         out PatchWhenCondition evaluated)
     {
         evaluated = condition;
@@ -862,6 +1171,52 @@ public sealed class StoryStateEvaluator
             || !condition.Key.Contains("CustomTokens", StringComparison.OrdinalIgnoreCase))
         {
             return false;
+        }
+
+        if (TryResolveYearsMarried(state, out var yearsMarried))
+        {
+            if (TryParseTokenAndModifier(condition.Key, out _, out _, out var modifierOperator, out var modifierValue)
+                && string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase))
+            {
+                var expected = TryParseBoolean(condition.Value, out var parsedExpected) ? parsedExpected : true;
+                var candidates = SplitCsv(modifierValue);
+                var matched = candidates.Any(candidate => int.TryParse(candidate, out var expectedYear) && expectedYear == yearsMarried);
+                evaluated = CreateEvaluatedPatchWhenCondition(
+                    condition,
+                    matched == expected,
+                    $"YearsMarried matched: value is {yearsMarried}.",
+                    $"YearsMarried failed: value is {yearsMarried}.",
+                    isProgressionSensitive: true);
+                return true;
+            }
+
+            if (int.TryParse(condition.Value, out var exactYear))
+            {
+                evaluated = CreateEvaluatedPatchWhenCondition(
+                    condition,
+                    yearsMarried == exactYear,
+                    $"YearsMarried matched: value is {yearsMarried}.",
+                    $"YearsMarried failed: value is {yearsMarried}.",
+                    isProgressionSensitive: true);
+                return true;
+            }
+
+            var expectedYears = SplitCsv(condition.Value)
+                .Select(value => int.TryParse(value, out var parsedYear) ? parsedYear : (int?)null)
+                .Where(value => value.HasValue)
+                .Select(value => value!.Value)
+                .ToList();
+            if (expectedYears.Count > 0)
+            {
+                var matched = expectedYears.Contains(yearsMarried);
+                evaluated = CreateEvaluatedPatchWhenCondition(
+                    condition,
+                    matched,
+                    $"YearsMarried matched: value is {yearsMarried}.",
+                    $"YearsMarried failed: value is {yearsMarried}, expected one of [{string.Join(", ", expectedYears)}].",
+                    isProgressionSensitive: true);
+                return true;
+            }
         }
 
         evaluated = CreateUnknownPatchWhenCondition(
@@ -967,6 +1322,17 @@ public sealed class StoryStateEvaluator
         }
 
         var resolved = TryResolvePatchWhenDateValue(node, modConfigByUniqueId);
+        if (resolved is null)
+        {
+            evaluated = CreateUnknownPatchWhenCondition(
+                condition,
+                "Date CP When is controlled by the date/random candidate system and is not expanded.",
+                unknownKind: "randomTokenUnsupported",
+                reasonZh: "\u968f\u673a/\u7ea6\u4f1a\u5019\u9009\u6761\u4ef6\u6682\u4e0d\u5c55\u5f00\u3002",
+                parsedType: "dynamicRandomToken");
+            return true;
+        }
+
         if (resolved is null)
         {
             evaluated = CreateUnknownPatchWhenCondition(
@@ -1257,6 +1623,11 @@ public sealed class StoryStateEvaluator
             return false;
         }
 
+        if (TryEvaluateScalarQueryExpression(node, condition, state, out evaluated))
+        {
+            return true;
+        }
+
         if (!TryParseSimpleQueryExpression(condition.Value, out var clauseGroups, out var usesOr))
         {
             evaluated = CreateUnknownPatchWhenCondition(
@@ -1374,6 +1745,132 @@ public sealed class StoryStateEvaluator
         }
 
         return clauseGroups.Count > 0;
+    }
+
+    private static bool TryEvaluateScalarQueryExpression(
+        StoryNode node,
+        PatchWhenCondition condition,
+        RuntimeGameState state,
+        out PatchWhenCondition evaluated)
+    {
+        evaluated = condition;
+        var expression = condition.Value.Trim();
+        if (expression.Contains("DateInterest", StringComparison.OrdinalIgnoreCase)
+            || expression.Contains("UniqueInterest", StringComparison.OrdinalIgnoreCase)
+            || expression.Contains("Random:", StringComparison.OrdinalIgnoreCase))
+        {
+            evaluated = CreateUnknownPatchWhenCondition(
+                condition,
+                "Random/probability CP Query is not expanded.",
+                unknownKind: "randomTokenUnsupported",
+                reasonZh: "随机/约会候选条件暂不展开。",
+                parsedType: "dynamicRandomToken");
+            return true;
+        }
+
+        var moduloMatch = Regex.Match(expression, @"^\s*\{\{Year\}\}\s*%\s*(\d+)\s*=\s*(\d+)\s*$", RegexOptions.IgnoreCase);
+        if (moduloMatch.Success
+            && int.TryParse(moduloMatch.Groups[1].Value, out var modulo)
+            && int.TryParse(moduloMatch.Groups[2].Value, out var expectedRemainder)
+            && modulo != 0)
+        {
+            var passed = state.Year % modulo == expectedRemainder;
+            evaluated = CreateEvaluatedPatchWhenCondition(
+                condition,
+                passed,
+                $"Query matched: {state.Year} % {modulo} == {expectedRemainder}.",
+                $"Query failed: {state.Year} % {modulo} != {expectedRemainder}.",
+                isContextSensitive: true);
+            return true;
+        }
+
+        var compareMatch = Regex.Match(
+            expression,
+            @"^\s*'?\{\{([^{}]+)\}\}'?\s*(>=|<=|>|<|=)\s*'?([^']*)'?\s*$",
+            RegexOptions.IgnoreCase);
+        if (!compareMatch.Success)
+        {
+            return false;
+        }
+
+        var token = compareMatch.Groups[1].Value.Trim();
+        var op = compareMatch.Groups[2].Value;
+        var expectedRaw = compareMatch.Groups[3].Value.Trim();
+
+        if (token.Contains("YearsMarried", StringComparison.OrdinalIgnoreCase)
+            && token.Contains("CustomTokens", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!TryResolveYearsMarried(state, out var yearsMarried))
+            {
+                evaluated = CreateUnknownPatchWhenCondition(
+                    condition,
+                    "External CustomTokens YearsMarried is not exported at patch-eval time.",
+                    unknownKind: "externalTokenMissing",
+                    reasonZh: "外部 CustomTokens 婚姻年限未导出。",
+                    parsedType: "externalCustomToken");
+                return true;
+            }
+
+            var passedYears = CompareNumeric(yearsMarried, op, expectedRaw);
+            if (passedYears is null)
+            {
+                return false;
+            }
+
+            evaluated = CreateEvaluatedPatchWhenCondition(
+                condition,
+                passedYears.Value,
+                $"Query YearsMarried matched: value is {yearsMarried}.",
+                $"Query YearsMarried failed: value is {yearsMarried}.",
+                isProgressionSensitive: true);
+            return true;
+        }
+
+        if (node.SourceModConfigValues.TryGetValue(token, out var configValue))
+        {
+            bool? passed = decimal.TryParse(configValue.Trim(), out var actualNumber)
+                ? CompareNumeric(actualNumber, op, expectedRaw)
+                : CompareString(configValue.Trim(), op, expectedRaw);
+            if (passed is null)
+            {
+                return false;
+            }
+
+            evaluated = CreateEvaluatedPatchWhenCondition(
+                condition,
+                passed.Value,
+                $"Query config matched: {token}={configValue}.",
+                $"Query config failed: {token}={configValue}.",
+                isProgressionSensitive: true);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool? CompareNumeric(decimal actual, string op, string expectedRaw)
+    {
+        if (!decimal.TryParse(expectedRaw, out var expected))
+        {
+            return null;
+        }
+
+        return op switch
+        {
+            ">=" => actual >= expected,
+            "<=" => actual <= expected,
+            ">" => actual > expected,
+            "<" => actual < expected,
+            "=" => actual == expected,
+            _ => null
+        };
+    }
+
+    private static bool? CompareString(string actual, string op, string expected)
+    {
+        return op == "="
+            ? string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase)
+            : null;
     }
 
     private static bool TryParseQueryClause(string clause, out PatchWhenCondition condition)
@@ -1538,7 +2035,8 @@ public sealed class StoryStateEvaluator
         string failureReason,
         bool isProgressionSensitive = false,
         bool isContextSensitive = false,
-        string reasonZh = "")
+        string reasonZh = "",
+        string parsedType = "")
     {
         return new PatchWhenCondition
         {
@@ -1552,7 +2050,8 @@ public sealed class StoryStateEvaluator
             Reason = passed ? successReason : failureReason,
             ReasonZh = string.IsNullOrWhiteSpace(reasonZh)
                 ? (passed ? successReason : failureReason)
-                : reasonZh
+                : reasonZh,
+            ParsedType = parsedType
         };
     }
 
@@ -1758,6 +2257,27 @@ public sealed class StoryStateEvaluator
             && values.Any(value => string.Equals(value.Trim(), expected, StringComparison.OrdinalIgnoreCase));
     }
 
+    private static bool TryResolveYearsMarried(RuntimeGameState state, out int yearsMarried)
+    {
+        if (state.YearsMarriedKnown && state.YearsMarried is int exportedYears)
+        {
+            yearsMarried = exportedYears;
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(state.SpouseName)
+            && string.IsNullOrWhiteSpace(state.Spouse)
+            && string.IsNullOrWhiteSpace(state.MarriedTo)
+            && (state.Spouses is null || state.Spouses.Length == 0))
+        {
+            yearsMarried = 0;
+            return true;
+        }
+
+        yearsMarried = 0;
+        return false;
+    }
+
     private static PatchWhenCondition NormalizePatchWhenCondition(PatchWhenCondition condition)
     {
         var key = condition.Key?.Trim() ?? string.Empty;
@@ -1816,6 +2336,20 @@ public sealed class StoryStateEvaluator
             return true;
         }
 
+        if (string.Equals(lowerKey, "datetype", StringComparison.Ordinal)
+            || string.Equals(lowerKey, "dateinterest", StringComparison.Ordinal)
+            || (string.Equals(lowerKey, "date", StringComparison.Ordinal)
+                && condition.Value.Contains("Random:", StringComparison.OrdinalIgnoreCase)))
+        {
+            evaluated = CreateUnknownPatchWhenCondition(
+                condition,
+                "Dynamic random date token is not expanded.",
+                unknownKind: "randomTokenUnsupported",
+                reasonZh: "随机/约会候选条件暂不展开。",
+                parsedType: "dynamicRandomToken");
+            return true;
+        }
+
         if (lowerKey.Contains("drinkchance", StringComparison.Ordinal)
             || (lowerKey.StartsWith("query:", StringComparison.Ordinal) && condition.Value.Contains("<=", StringComparison.Ordinal)))
         {
@@ -1829,6 +2363,82 @@ public sealed class StoryStateEvaluator
         }
 
         return false;
+    }
+
+    private static bool TryEvaluateFamilyStateCondition(
+        PatchWhenCondition condition,
+        RuntimeGameState state,
+        out PatchWhenCondition evaluated)
+    {
+        evaluated = condition;
+        if (!TryParseTokenAndModifier(condition.Key, out var token, out _, out var modifierOperator, out var modifierValue))
+        {
+            return false;
+        }
+
+        if (!string.Equals(token, "Pregnant", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(token, "HavingChild", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!state.FamilyStateKnown)
+        {
+            var label = string.Equals(token, "Pregnant", StringComparison.OrdinalIgnoreCase)
+                ? "Pregnant"
+                : "HavingChild";
+            evaluated = CreateUnknownPatchWhenCondition(
+                condition,
+                $"{label} CP When requires runtime family state that is not exported.",
+                unknownKind: "runtimeMissing",
+                reasonZh: $"无法判断：运行时家庭状态未导出（{label}）。",
+                parsedType: "cpFamilyState");
+            return true;
+        }
+
+        var trackedPlayers = string.Equals(token, "Pregnant", StringComparison.OrdinalIgnoreCase)
+            ? state.PregnantPlayers ?? Array.Empty<string>()
+            : state.HavingChildPlayers ?? Array.Empty<string>();
+        var currentPlayerName = state.PlayerName?.Trim() ?? string.Empty;
+
+        bool passed;
+        if (string.Equals(modifierOperator, "contains", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(modifierValue))
+        {
+            var expected = TryParseBoolean(condition.Value, out var parsedBool) ? parsedBool : true;
+            var candidates = SplitCsv(modifierValue)
+                .Select(value => ResolveFamilyStateTarget(value, currentPlayerName))
+                .Where(value => !string.IsNullOrWhiteSpace(value))
+                .ToList();
+            var matched = candidates.Any(candidate => IsListed(trackedPlayers, candidate));
+            passed = matched == expected;
+        }
+        else if (TryParseBoolean(condition.Value, out var expectedBool))
+        {
+            var hasCurrentPlayer = !string.IsNullOrWhiteSpace(currentPlayerName)
+                && IsListed(trackedPlayers, currentPlayerName);
+            passed = hasCurrentPlayer == expectedBool;
+        }
+        else
+        {
+            var target = ResolveFamilyStateTarget(condition.Value, currentPlayerName);
+            passed = !string.IsNullOrWhiteSpace(target) && IsListed(trackedPlayers, target);
+        }
+
+        evaluated = CreateEvaluatedPatchWhenCondition(
+            condition,
+            passed,
+            $"{token} matched from exported runtime family state.",
+            $"{token} failed against exported runtime family state.",
+            isProgressionSensitive: true);
+        return true;
+    }
+
+    private static string ResolveFamilyStateTarget(string rawValue, string currentPlayerName)
+    {
+        var trimmed = rawValue.Trim();
+        return string.Equals(trimmed, "@{{playerName}}", StringComparison.OrdinalIgnoreCase)
+            ? currentPlayerName
+            : trimmed;
     }
 
     private static bool TryResolveConfigValue(

@@ -40,11 +40,26 @@ export interface RuntimeGameState {
   hasSpouseBed?: boolean | null;
   farmhouseUpgradeKnown?: boolean;
   farmhouseUpgradeLevel?: number | null;
+  familyStateKnown?: boolean;
+  pregnantPlayers?: string[];
+  havingChildPlayers?: string[];
+  childrenCount?: number | null;
+  childGenders?: string[];
+  yearsMarriedKnown?: boolean;
+  yearsMarried?: number | null;
+  anniversarySeason?: string | null;
+  anniversaryDay?: number | null;
+  hasItemKnown?: boolean;
+  inventoryItemIds?: string[];
   seenEvents: string[];
   mail: string[];
   dialogueAnswers: string[];
+  dialogueAnswersKnown?: boolean;
+  dialogueAnswerIds?: string[];
   activeDialogueEventsKnown?: boolean;
   activeDialogueEvents?: string[];
+  activeQuestsKnown?: boolean;
+  activeQuestIds?: string[];
   dayEventsKnown?: boolean;
   dayEvents?: string[];
 }

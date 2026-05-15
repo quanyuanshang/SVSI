@@ -16,6 +16,9 @@ internal static class ConditionEvaluatorTests
         Evaluate_IsHost_DefaultsTrue();
         Evaluate_Friendship_TrueAndFalse();
         Evaluate_Friendship_MinFriendshipPlaceholder_IsExternalTokenMissing();
+        Evaluate_HasItem_WithKnownInventory_Passes();
+        Evaluate_HasItem_WithoutInventoryExport_IsRuntimeMissing();
+        Evaluate_GameStateQueryPlayerHasItem_ParsesToHasItem();
         Evaluate_Dating_TrueAndFalse();
         Evaluate_NpcVisibleHere_TrueAndFalse();
         Evaluate_InUpgradedHouse_TrueAndFalse();
@@ -85,6 +88,7 @@ internal static class ConditionEvaluatorTests
         var result = evaluator.Evaluate(CreateAtom("FestivalDay", "F"), CreateBaseState(isFestivalDay: null));
         AssertEqual(false, result.Passed, "Missing festival runtime should be treated as not currently festival for legacy F.");
         AssertEqual(false, result.HasUnknown, "Missing festival runtime should not make legacy F unknown.");
+        AssertEqual(false, result.Reason.Contains("unavailable", StringComparison.OrdinalIgnoreCase), "FestivalDay fallback reason should not surface unavailable runtime text.");
     }
 
     private static void Evaluate_Year_TrueAndFalse()
@@ -238,6 +242,38 @@ internal static class ConditionEvaluatorTests
         AssertEqual("ExternalTokenMissing", result.AtomResults[0].AtomType, "MinFriendship should classify as ExternalTokenMissing.");
         AssertEqual("externalTokenMissing", result.AtomResults[0].UnknownKind, "MinFriendship unknown kind mismatch.");
         AssertContains(result.AtomResults[0].ReasonZh!, "MinFriendship", "MinFriendship reason should mention the token.");
+    }
+
+    private static void Evaluate_HasItem_WithKnownInventory_Passes()
+    {
+        var evaluator = new ConditionEvaluator();
+        var state = CreateBaseState(hasItemKnown: true, inventoryItemIds: new[] { "ReturnScepter" });
+        var result = evaluator.Evaluate(CreateAtom("HasItem", "HasItem ReturnScepter", "ReturnScepter"), state);
+
+        AssertEqual(true, result.Passed, "HasItem should pass when the exported inventory contains the item.");
+        AssertEqual(false, result.HasUnknown, "Known HasItem inventory should not be unknown.");
+    }
+
+    private static void Evaluate_HasItem_WithoutInventoryExport_IsRuntimeMissing()
+    {
+        var evaluator = new ConditionEvaluator();
+        var result = evaluator.Evaluate(CreateAtom("HasItem", "HasItem ReturnScepter", "ReturnScepter"), CreateBaseState());
+
+        AssertEqual(null, result.Passed, "HasItem without inventory export should stay unknown.");
+        AssertEqual("runtimeMissing", result.AtomResults[0].UnknownKind, "HasItem should be runtimeMissing, not unsupported.");
+        AssertEqual("HasItem", result.AtomResults[0].AtomType, "HasItem atom type should be preserved.");
+    }
+
+    private static void Evaluate_GameStateQueryPlayerHasItem_ParsesToHasItem()
+    {
+        var parser = new EventPreconditionParser();
+        var parsed = parser.Parse(new[] { "G PLAYER_HAS_ITEM Current ReturnScepter" });
+        var evaluator = new ConditionEvaluator();
+        var state = CreateBaseState(hasItemKnown: true, inventoryItemIds: new[] { "ReturnScepter" });
+
+        var result = evaluator.Evaluate(parsed.ConditionAst, state);
+        AssertEqual(true, result.Passed, "PLAYER_HAS_ITEM should lower to HasItem and evaluate.");
+        AssertEqual("HasItem", result.AtomResults[0].AtomType, "PLAYER_HAS_ITEM atom type mismatch.");
     }
 
     private static void Evaluate_SawEvent_TrueAndFalse()
@@ -618,6 +654,8 @@ internal static class ConditionEvaluatorTests
         bool inUpgradedHouse = true,
         bool? isFestivalDay = false,
         string? spouse = null,
+        bool hasItemKnown = false,
+        IEnumerable<string>? inventoryItemIds = null,
         params string[] visibleNpcNamesHere)
     {
         return new RuntimeGameState
@@ -644,6 +682,8 @@ internal static class ConditionEvaluatorTests
                 StringComparer.Ordinal
             ),
             InUpgradedHouse = inUpgradedHouse,
+            HasItemKnown = hasItemKnown,
+            InventoryItemIds = new HashSet<string>(inventoryItemIds ?? Array.Empty<string>(), StringComparer.Ordinal),
             SeenEvents = new HashSet<string>(new[] { "100001" }, StringComparer.Ordinal),
             Mail = new HashSet<string>(new[] { "someMail" }, StringComparer.Ordinal),
             DialogueAnswers = new HashSet<string>(new[] { "ShaneAnswerA" }, StringComparer.Ordinal)

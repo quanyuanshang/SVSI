@@ -14,6 +14,7 @@ internal static class EventIndexBuilderTests
         Build_ExpandsDynamicTokenPreconditions_WithoutMarkingUnknown();
         Build_CollectsDynamicTokensFromIncludes();
         Build_IgnoresNonStringDynamicTokenValuesWithoutThrowing();
+        Build_ResolvesMinFriendshipDynamicTokenFromConfigQuery();
         Build_SkipsBranchOnlyEventEntries();
         Build_DeduplicatesOverriddenEventKeysWithinLocation();
         Build_SkipsAnswerIdAfterForkEventIdAnswerId();
@@ -243,6 +244,25 @@ internal static class EventIndexBuilderTests
         var result = new EventIndexBuilder().Build(new[] { scannedMod });
 
         AssertEqual(1, result.NodeCount, "Boolean-valued DynamicTokens should not crash event indexing.");
+    }
+
+    private static void Build_ResolvesMinFriendshipDynamicTokenFromConfigQuery()
+    {
+        var scannedMod = CreateScannedMod(
+            "Date Config Pack",
+            "Tests.DateConfigPack",
+            "{ \"DynamicTokens\": [ { \"Name\": \"MinFriendship\", \"Value\": \"{{Query: {{Min Hearts Required}} * 250}}\" } ], " +
+            "\"Changes\": [ { \"Action\": \"EditData\", \"Target\": \"Data/Events/WizardHouse\", \"Entries\": { \"730001/f Wizard {{MinFriendship}}\": \"event script\" } } ] }"
+        );
+        scannedMod.ConfigValues["Min Hearts Required"] = "10";
+
+        var result = new EventIndexBuilder().Build(new[] { scannedMod });
+        var node = result.Nodes.Single();
+        var atom = node.ConditionAst.Children.Single();
+
+        AssertEqual(0, node.UnknownFragments.Count, "Resolved MinFriendship should not become an unknown fragment.");
+        AssertEqual("Friendship", atom.AtomType, "MinFriendship should still parse as a friendship atom.");
+        AssertSequenceEqual(new[] { "Wizard", "2500" }, atom.Values, "MinFriendship should resolve from config query math.");
     }
 
     private static void Build_SkipsBranchOnlyEventEntries()

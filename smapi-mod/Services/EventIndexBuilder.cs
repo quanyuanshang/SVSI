@@ -466,6 +466,12 @@ public sealed class EventIndexBuilder
         foreach (var definition in definitions)
         {
             var value = definition.Value?.Trim() ?? string.Empty;
+            if (TryResolveTemplateQueryValue(value, mod, out var queryReplacement))
+            {
+                replacement = queryReplacement;
+                return true;
+            }
+
             if (value.Length > 0 && definition.WhenConditions.Count == 0)
             {
                 replacement = value;
@@ -480,6 +486,75 @@ public sealed class EventIndexBuilder
         }
 
         return false;
+    }
+
+    private static bool TryResolveTemplateQueryValue(string value, ScannedMod mod, out string replacement)
+    {
+        replacement = string.Empty;
+        var trimmed = value.Trim();
+        if (trimmed.StartsWith("{{", StringComparison.Ordinal) && trimmed.EndsWith("}}", StringComparison.Ordinal))
+        {
+            trimmed = trimmed[2..^2].Trim();
+        }
+
+        if (!trimmed.StartsWith("Query:", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var expression = trimmed["Query:".Length..].Trim();
+        expression = Regex.Replace(
+            expression,
+            @"\{\{([^{}]+)\}\}",
+            match =>
+            {
+                var key = match.Groups[1].Value.Trim();
+                return mod.ConfigValues.TryGetValue(key, out var configValue)
+                    ? configValue.Trim()
+                    : match.Value;
+            });
+
+        if (expression.Contains("{{", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var multiplyMatch = Regex.Match(expression, @"^\s*(-?\d+(?:\.\d+)?)\s*\*\s*(-?\d+(?:\.\d+)?)\s*$");
+        if (multiplyMatch.Success
+            && decimal.TryParse(multiplyMatch.Groups[1].Value, out var left)
+            && decimal.TryParse(multiplyMatch.Groups[2].Value, out var right))
+        {
+            replacement = FormatDecimal(left * right);
+            return true;
+        }
+
+        var compareMatch = Regex.Match(expression, @"^\s*(-?\d+(?:\.\d+)?)\s*(>=|<=|>|<|=)\s*(-?\d+(?:\.\d+)?)\s*$");
+        if (compareMatch.Success
+            && decimal.TryParse(compareMatch.Groups[1].Value, out var compareLeft)
+            && decimal.TryParse(compareMatch.Groups[3].Value, out var compareRight))
+        {
+            var op = compareMatch.Groups[2].Value;
+            var passed = op switch
+            {
+                ">=" => compareLeft >= compareRight,
+                "<=" => compareLeft <= compareRight,
+                ">" => compareLeft > compareRight,
+                "<" => compareLeft < compareRight,
+                "=" => compareLeft == compareRight,
+                _ => false
+            };
+            replacement = passed ? "true" : "false";
+            return true;
+        }
+
+        return false;
+    }
+
+    private static string FormatDecimal(decimal value)
+    {
+        return value == decimal.Truncate(value)
+            ? decimal.Truncate(value).ToString(System.Globalization.CultureInfo.InvariantCulture)
+            : value.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private bool TryExpandDynamicTokenFragment(

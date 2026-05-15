@@ -367,7 +367,9 @@ export function StoryNodeDetail({
                     {condition.isKnown
                       ? condition.reasonZh ?? condition.reason ?? "已评估。"
                       : condition.unknownKind === "runtimeMissing"
-                        ? `无法判断：${condition.reasonZh ?? condition.reason ?? "运行时状态缺失"}`
+                        ? (condition.reasonZh?.startsWith("无法判断：")
+                            ? condition.reasonZh
+                            : `无法判断：${condition.reasonZh ?? condition.reason ?? "运行时状态缺失"}`)
                         : condition.unknownKind === "complexQueryUnsupported"
                           || condition.unknownKind === "randomTokenUnsupported"
                           ? (condition.reasonZh ?? "随机/概率条件暂不展开。")

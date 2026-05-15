@@ -29,6 +29,7 @@ public sealed class ConditionEvaluator
         "LocalMail",
         "HostMail",
         "HostOrLocalMail",
+        "HasItem",
         "ChoseDialogueAnswers",
         "ActiveDialogueEvent",
         "Spouse",
@@ -187,6 +188,7 @@ public sealed class ConditionEvaluator
             "Spouse" => this.EvaluateSpouseAtom(raw, node.Values, state),
             "IsHost" => this.CreateAtomResult(raw, "IsHost", true, "IsHost matched: offline/runtime export is treated as host."),
             "Friendship" => this.EvaluateFriendshipAtom(raw, node.Values, state),
+            "HasItem" => this.EvaluateHasItemAtom(raw, node.Values, state),
             "Dating" => this.EvaluateDatingAtom(raw, node.Values, state),
             "Relationship" => this.EvaluateRelationshipAtom(raw, node.Values, state),
             "NpcVisibleHere" => this.EvaluateNpcVisibleHereAtom(raw, node.Values, state),
@@ -197,6 +199,19 @@ public sealed class ConditionEvaluator
             "LocalMail" or "HostMail" or "HostOrLocalMail" => this.EvaluateMailAtom(raw, atomType, node.Values, state),
             "ChoseDialogueAnswers" => this.EvaluateDialogueAnswerAtom(raw, node.Values, state),
             "ActiveDialogueEvent" => this.EvaluateActiveDialogueEventAtom(raw, node.Values, state),
+            "Random" => this.CreateUnknownAtomResult(
+                raw,
+                "Random",
+                "Random/probability atom is not expanded.",
+                unknownKind: "randomTokenUnsupported",
+                reasonZh: "随机/概率条件暂不展开。"),
+            "DaysPlayed" or "Gender" or "FreeInventorySlots" or "Tile" or "JojaBundlesDone"
+                or "CommunityCenterOrWarehouseDone" or "ReachedMineBottom" => this.CreateUnknownAtomResult(
+                    raw,
+                    atomType,
+                    $"{atomType} runtime export is unavailable.",
+                    unknownKind: "runtimeMissing",
+                    reasonZh: $"运行时状态缺失：{atomType}。"),
             "Unknown" => this.CreateUnknownAtomResult(raw, atomType, "Unknown atom cannot be evaluated."),
             _ => this.CreateUnknownAtomResult(raw, atomType, $"Unsupported atom type: {atomType}")
         };
@@ -212,10 +227,24 @@ public sealed class ConditionEvaluator
 
     private ConditionEvaluationResult EvaluateUnknown(ConditionAstNode node)
     {
+        var raw = node.Raw ?? string.Empty;
+        var unknownKind = raw.TrimStart().StartsWith("{{", StringComparison.Ordinal)
+            ? "externalTokenMissing"
+            : raw.TrimStart().StartsWith("x ", StringComparison.OrdinalIgnoreCase)
+                ? "runtimeMissing"
+                : "parseUnknown";
+        var reasonZh = unknownKind switch
+        {
+            "externalTokenMissing" => "外部/动态 token 未导出，无法判断条件。",
+            "runtimeMissing" => "运行时状态缺失，无法判断条件。",
+            _ => "解析器暂不支持该条件。"
+        };
         var atomResult = this.CreateUnknownAtomResult(
-            node.Raw ?? string.Empty,
+            raw,
             node.AtomType ?? "Unknown",
-            "Unknown condition node cannot be evaluated."
+            "Unknown condition node cannot be evaluated.",
+            unknownKind: unknownKind,
+            reasonZh: reasonZh
         );
 
         return new ConditionEvaluationResult
@@ -370,7 +399,7 @@ public sealed class ConditionEvaluator
     {
         if (state.IsFestivalDay is null)
         {
-            return this.CreateAtomResult(raw, "FestivalDay", false, "FestivalDay defaulted false: runtime festival state is unavailable.");
+            return this.CreateAtomResult(raw, "FestivalDay", false, "FestivalDay failed: today is not detected as a festival day.");
         }
 
         return this.CreateAtomResult(
@@ -487,6 +516,37 @@ public sealed class ConditionEvaluator
                 ? $"Dating matched: player is dating {npcName}"
                 : $"Dating failed: player is not dating {npcName}"
         );
+    }
+
+    private ConditionAtomResult EvaluateHasItemAtom(string raw, IReadOnlyList<string> values, RuntimeGameState state)
+    {
+        if (values.Count == 0 || string.IsNullOrWhiteSpace(values[0]))
+        {
+            return this.CreateUnknownAtomResult(raw, "HasItem", "HasItem condition has no item id or name.");
+        }
+
+        if (!state.HasItemKnown)
+        {
+            return this.CreateUnknownAtomResult(
+                raw,
+                "HasItem",
+                "HasItem runtime inventory export is unavailable.",
+                unknownKind: "runtimeMissing",
+                reasonZh: "无法判断：运行时物品栏未导出。");
+        }
+
+        var requestedItems = values
+            .Select(value => value.Trim())
+            .Where(value => value.Length > 0)
+            .ToList();
+        var matched = requestedItems.Any(item => state.InventoryItemIds.Contains(item));
+        return this.CreateAtomResult(
+            raw,
+            "HasItem",
+            matched,
+            matched
+                ? $"HasItem matched: inventory contains one of [{string.Join(", ", requestedItems)}]."
+                : $"HasItem failed: inventory is missing [{string.Join(", ", requestedItems)}].");
     }
 
     private ConditionAtomResult EvaluateRelationshipAtom(string raw, IReadOnlyList<string> values, RuntimeGameState state)
@@ -761,7 +821,7 @@ public sealed class ConditionEvaluator
             IsContextSensitive = ContextSensitiveAtomTypes.Contains(atomType),
             IsProgressionSensitive = ProgressionSensitiveAtomTypes.Contains(atomType),
             Reason = reason,
-            UnknownKind = unknownKind,
+            UnknownKind = unknownKind ?? "parseUnknown",
             ReasonZh = string.IsNullOrWhiteSpace(reasonZh) ? reason : reasonZh
         };
     }

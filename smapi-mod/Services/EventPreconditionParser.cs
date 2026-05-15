@@ -229,6 +229,9 @@ public sealed class EventPreconditionParser
                 => CreateAtom("SawEvent", originalRawFragment, new List<string> { queryArgs[0] }),
             "PLAYER_HAS_MAIL" when queryArgs.Count >= 1
                 => CreateAtom("LocalMail", originalRawFragment, new List<string> { queryArgs[0] }),
+            "PLAYER_HAS_ITEM" when queryArgs.Count >= 1
+                && !string.Equals(queryArgs[0], "CurrentTool", StringComparison.OrdinalIgnoreCase)
+                => CreateAtom("HasItem", originalRawFragment, new List<string> { queryArgs[0] }),
             "PLAYER_HAS_FLAG" when queryArgs.Count >= 1
                 => CreateAtom("LocalMail", originalRawFragment, new List<string> { queryArgs[0] }),
             "SEASON_DAY" when queryArgs.Count >= 2

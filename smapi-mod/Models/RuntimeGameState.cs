@@ -50,15 +50,45 @@ public sealed class RuntimeGameState
 
     public int? FarmhouseUpgradeLevel { get; init; }
 
+    public bool FamilyStateKnown { get; init; }
+
+    public string[] PregnantPlayers { get; init; } = Array.Empty<string>();
+
+    public string[] HavingChildPlayers { get; init; } = Array.Empty<string>();
+
+    public int? ChildrenCount { get; init; }
+
+    public string[] ChildGenders { get; init; } = Array.Empty<string>();
+
+    public bool YearsMarriedKnown { get; init; }
+
+    public int? YearsMarried { get; init; }
+
+    public string? AnniversarySeason { get; init; }
+
+    public int? AnniversaryDay { get; init; }
+
+    public bool HasItemKnown { get; init; }
+
+    public HashSet<string> InventoryItemIds { get; init; } = new(StringComparer.Ordinal);
+
     public HashSet<string> SeenEvents { get; init; } = new(StringComparer.Ordinal);
 
     public HashSet<string> Mail { get; init; } = new(StringComparer.Ordinal);
 
     public HashSet<string> DialogueAnswers { get; init; } = new(StringComparer.Ordinal);
 
+    public bool DialogueAnswersKnown { get; init; }
+
+    public HashSet<string> DialogueAnswerIds { get; init; } = new(StringComparer.Ordinal);
+
     public bool ActiveDialogueEventsKnown { get; init; }
 
     public HashSet<string> ActiveDialogueEvents { get; init; } = new(StringComparer.Ordinal);
+
+    public bool ActiveQuestsKnown { get; init; }
+
+    public HashSet<string> ActiveQuestIds { get; init; } = new(StringComparer.Ordinal);
 
     public bool DayEventsKnown { get; init; }
 

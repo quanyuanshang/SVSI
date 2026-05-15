@@ -24,6 +24,7 @@ internal static class StoryStateEvaluatorTests
         Evaluate_DynamicTokenSebGameStatus_AllGood_WhenBranchPasses();
         Evaluate_Query_HasModOrSamCustomSprites_PassesWhenConfigYes();
         Evaluate_Query_HasModFalseOrDanceSpritesYes_PassesWhenDanceSpritesYes();
+        Evaluate_Query_DateAskPercentChance_FromConfig_Passes();
         Evaluate_DayEventWedding_WithDayEventsUnknown_IsRuntimeMissing();
         Evaluate_DayEventWedding_WithKnownEmptyDayEvents_Fails();
         Evaluate_DayEventWedding_WithKnownWedding_Passes();
@@ -33,13 +34,26 @@ internal static class StoryStateEvaluatorTests
         Evaluate_DynamicTokenSebbySprite_Yes_WithQueryGuard();
         Evaluate_ActiveDialogueEvent_Alias_NotUnsupported();
         Evaluate_Pregnant_When_IsRuntimeMissingNotParseUnknown();
+        Evaluate_Pregnant_When_RuntimeExported_Passes();
+        Evaluate_HavingChild_When_RuntimeExported_Fails();
         Evaluate_Pregnant_When_StatusReason_ZhHasFamilyStatePhrase();
         Evaluate_NonNumericBranchTargets_AreNotUnknown();
         Evaluate_DayEventContains_Festivals_KnownEmpty_ExpectedFalse_Passes();
         Evaluate_FarmhouseUpgrade_Contains_WhenUnknown_IsRuntimeMissing();
         Evaluate_FarmhouseUpgrade_Exact_WhenKnown_Passes();
+        Evaluate_FarmhouseUpgrade_CsvExact_WhenKnown_Passes();
+        Evaluate_HasDialogueAnswer_WhenKnown_Passes();
+        Evaluate_HasDialogueAnswer_WhenUnknown_IsRuntimeMissing();
+        Evaluate_HasActiveQuest_WhenKnown_Passes();
+        Evaluate_HasActiveQuest_WhenUnknown_IsRuntimeMissing();
+        Evaluate_DateType_When_IsRandomUnsupportedNotParseUnknown();
+        Evaluate_Date_WhenUnresolved_IsRandomUnsupportedNotExternalMissing();
         Evaluate_CmctConfig_ReadsTargetModConfig();
         Evaluate_YearsMarried_CustomToken_IsExternalMissingNotParseUnknown();
+        Evaluate_YearsMarried_CustomToken_WhenKnown_Passes();
+        Evaluate_YearsMarried_CustomToken_WhenKnownZero_PassesContainsZero();
+        Evaluate_YearsMarried_CustomToken_BareCsv_WhenKnownZero_Passes();
+        Evaluate_YearsMarried_CustomToken_NoSpouse_DefaultsToZero();
     }
 
     private static void Evaluate_NonNumericEventIdWithoutPreconditions_IsUnknownNotCurrent()
@@ -612,6 +626,22 @@ internal static class StoryStateEvaluatorTests
         AssertEqual(true, patch.Passed, "DanceSprites=yes should satisfy the OR query.");
     }
 
+    private static void Evaluate_Query_DateAskPercentChance_FromConfig_Passes()
+    {
+        var node = CreateNode("400023", "Tests.Query", "Query Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition
+        {
+            Key = "Query",
+            Value = "{{Date Ask Percent Chance}} > 0"
+        });
+        node.SourceModConfigValues["Date Ask Percent Chance"] = "25";
+
+        var patch = new StoryStateEvaluator().Evaluate(new[] { node }, CreateBaseState()).Nodes.Single().PatchWhenConditions.Single();
+
+        AssertTrue(patch.IsKnown, "Simple numeric config Query should be known.");
+        AssertEqual(true, patch.Passed, "Date Ask Percent Chance=25 should satisfy > 0.");
+    }
+
     private static void Evaluate_DayEventWedding_WithDayEventsUnknown_IsRuntimeMissing()
     {
         var node = CreateNode("400006", "Tests.DayEvent", "DayEvent Pack", "Town", new ConditionAstNode { Type = "AllOf" });
@@ -637,6 +667,10 @@ internal static class StoryStateEvaluatorTests
         var patch = new StoryStateEvaluator().Evaluate(new[] { node }, state).Nodes.Single().PatchWhenConditions.Single();
         AssertTrue(patch.IsKnown, "Known empty DayEvents should still be evaluable.");
         AssertEqual(false, patch.Passed, "Known empty DayEvents should fail wedding check.");
+
+        var evaluation = new StoryStateEvaluator().Evaluate(new[] { node }, state).Nodes.Single();
+        AssertEqual(StoryNodeStatus.AvailableLater, evaluation.Status, "Failed DayEvent context should make the node AvailableLater.");
+        AssertContains(evaluation.StatusReason, "今日事件不满足", "Failed DayEvent context reason should use player-facing Chinese text.");
     }
 
     private static void Evaluate_DayEventWedding_WithKnownWedding_Passes()
@@ -672,6 +706,35 @@ internal static class StoryStateEvaluatorTests
         AssertEqual(false, patch.IsKnown, "Pregnant should stay unknown until runtime export exists.");
         AssertEqual("runtimeMissing", patch.UnknownKind, "Pregnant should be runtimeMissing.");
         AssertEqual("cpFamilyState", patch.ParsedType, "Pregnant parsed type mismatch.");
+    }
+
+
+    private static void Evaluate_Pregnant_When_RuntimeExported_Passes()
+    {
+        var node = CreateNode("400012b", "Tests.Family", "Family Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition { Key = "Pregnant", Value = "true" });
+
+        var patch = new StoryStateEvaluator()
+            .Evaluate(new[] { node }, CreateBaseState(familyStateKnown: true, pregnantPlayers: new[] { "MockFarmer" }))
+            .Nodes.Single()
+            .PatchWhenConditions.Single();
+
+        AssertEqual(true, patch.IsKnown, "Pregnant should evaluate once family runtime data exists.");
+        AssertEqual(true, patch.Passed, "Pregnant should pass for exported pregnant player.");
+    }
+
+    private static void Evaluate_HavingChild_When_RuntimeExported_Fails()
+    {
+        var node = CreateNode("400012c", "Tests.Family", "Family Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition { Key = "HavingChild", Value = "true" });
+
+        var patch = new StoryStateEvaluator()
+            .Evaluate(new[] { node }, CreateBaseState(familyStateKnown: true, havingChildPlayers: Array.Empty<string>()))
+            .Nodes.Single()
+            .PatchWhenConditions.Single();
+
+        AssertEqual(true, patch.IsKnown, "HavingChild should evaluate once family runtime data exists.");
+        AssertEqual(false, patch.Passed, "HavingChild should fail when no pending child is exported.");
     }
 
     private static void Evaluate_Pregnant_When_StatusReason_ZhHasFamilyStatePhrase()
@@ -779,6 +842,99 @@ internal static class StoryStateEvaluatorTests
         AssertEqual(true, patch.Passed, "FarmhouseUpgrade level 1 should match.");
     }
 
+    private static void Evaluate_FarmhouseUpgrade_CsvExact_WhenKnown_Passes()
+    {
+        var node = CreateNode("400019", "Tests.Farm", "Farm Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition { Key = "FarmhouseUpgrade", Value = "1, 2, 3" });
+
+        var state = CreateBaseState(farmhouseUpgradeKnown: true, farmhouseUpgradeLevel: 2);
+        var patch = new StoryStateEvaluator().Evaluate(new[] { node }, state).Nodes.Single().PatchWhenConditions.Single();
+
+        AssertTrue(patch.IsKnown, "FarmhouseUpgrade CSV exact value should be parsed.");
+        AssertEqual(true, patch.Passed, "FarmhouseUpgrade level 2 should match CSV exact values.");
+    }
+
+    private static void Evaluate_HasDialogueAnswer_WhenKnown_Passes()
+    {
+        var node = CreateNode("400020", "Tests.DialogueAnswer", "Dialogue Answer Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition { Key = "HasDialogueAnswer: 30730051", Value = "true" });
+
+        var state = CreateBaseState(dialogueAnswersKnown: true, dialogueAnswers: new[] { "30730051" });
+        var patch = new StoryStateEvaluator().Evaluate(new[] { node }, state).Nodes.Single().PatchWhenConditions.Single();
+
+        AssertTrue(patch.IsKnown, "HasDialogueAnswer should evaluate when dialogue answers are exported.");
+        AssertEqual(true, patch.Passed, "HasDialogueAnswer should pass for recorded answer id.");
+    }
+
+    private static void Evaluate_HasDialogueAnswer_WhenUnknown_IsRuntimeMissing()
+    {
+        var node = CreateNode("400021", "Tests.DialogueAnswer", "Dialogue Answer Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition { Key = "HasDialogueAnswer: 30730055", Value = "true" });
+
+        var patch = new StoryStateEvaluator().Evaluate(new[] { node }, CreateBaseState(dialogueAnswersKnown: false)).Nodes.Single().PatchWhenConditions.Single();
+
+        AssertEqual(false, patch.IsKnown, "Missing dialogue answer export should stay unknown.");
+        AssertEqual("runtimeMissing", patch.UnknownKind, "HasDialogueAnswer should be runtimeMissing.");
+        AssertEqual("cpHasDialogueAnswer", patch.ParsedType, "HasDialogueAnswer parsed type mismatch.");
+    }
+
+    private static void Evaluate_DateType_When_IsRandomUnsupportedNotParseUnknown()
+    {
+        var node = CreateNode("400022", "Tests.DateType", "Date Type Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition { Key = "DateType", Value = "{{Random: frog, mine}}" });
+
+        var patch = new StoryStateEvaluator().Evaluate(new[] { node }, CreateBaseState()).Nodes.Single().PatchWhenConditions.Single();
+
+        AssertEqual(false, patch.IsKnown, "DateType random token should remain unknown.");
+        AssertEqual("randomTokenUnsupported", patch.UnknownKind, "DateType should be classified as randomTokenUnsupported.");
+        AssertEqual("dynamicRandomToken", patch.ParsedType, "DateType parsed type mismatch.");
+    }
+
+    private static void Evaluate_HasActiveQuest_WhenKnown_Passes()
+    {
+        var node = CreateNode("400023", "Tests.Quest", "Quest Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition { Key = "HasActiveQuest", Value = "1728490" });
+
+        var patch = new StoryStateEvaluator()
+            .Evaluate(new[] { node }, CreateBaseState(activeQuestsKnown: true, activeQuestIds: new[] { "1728490" }))
+            .Nodes.Single()
+            .PatchWhenConditions.Single();
+
+        AssertEqual(true, patch.IsKnown, "HasActiveQuest should evaluate when active quests are exported.");
+        AssertEqual(true, patch.Passed, "HasActiveQuest should pass when the quest id is active.");
+        AssertEqual("cpHasActiveQuest", patch.ParsedType, "HasActiveQuest parsed type mismatch.");
+    }
+
+    private static void Evaluate_HasActiveQuest_WhenUnknown_IsRuntimeMissing()
+    {
+        var node = CreateNode("400024", "Tests.Quest", "Quest Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition { Key = "HasActiveQuest", Value = "1728490" });
+
+        var patch = new StoryStateEvaluator()
+            .Evaluate(new[] { node }, CreateBaseState(activeQuestsKnown: false))
+            .Nodes.Single()
+            .PatchWhenConditions.Single();
+
+        AssertEqual(false, patch.IsKnown, "HasActiveQuest should stay unknown until active quests are exported.");
+        AssertEqual("runtimeMissing", patch.UnknownKind, "HasActiveQuest should be runtimeMissing.");
+        AssertEqual("cpHasActiveQuest", patch.ParsedType, "HasActiveQuest parsed type mismatch.");
+    }
+
+    private static void Evaluate_Date_WhenUnresolved_IsRandomUnsupportedNotExternalMissing()
+    {
+        var node = CreateNode("400025", "Tests.Date", "Date Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition { Key = "Date", Value = "Alex" });
+
+        var patch = new StoryStateEvaluator()
+            .Evaluate(new[] { node }, CreateBaseState())
+            .Nodes.Single()
+            .PatchWhenConditions.Single();
+
+        AssertEqual(false, patch.IsKnown, "Unresolved Date CP When should remain unknown.");
+        AssertEqual("randomTokenUnsupported", patch.UnknownKind, "Unresolved Date should be a random/date candidate, not external missing.");
+        AssertEqual("dynamicRandomToken", patch.ParsedType, "Date parsed type mismatch.");
+    }
+
     private static void Evaluate_CmctConfig_ReadsTargetModConfig()
     {
         var node = CreateNode("400017", "Tests.Cmct", "CMCT Pack", "Town", new ConditionAstNode { Type = "AllOf" });
@@ -811,11 +967,85 @@ internal static class StoryStateEvaluatorTests
             Value = "true"
         });
 
-        var patch = new StoryStateEvaluator().Evaluate(new[] { node }, CreateBaseState()).Nodes.Single().PatchWhenConditions.Single();
-        AssertEqual(false, patch.IsKnown, "YearsMarried CustomTokens should stay unknown conservatively.");
+        var patch = new StoryStateEvaluator().Evaluate(new[] { node }, CreateBaseState(spouse: "Wizard")).Nodes.Single().PatchWhenConditions.Single();
+        AssertEqual(false, patch.IsKnown, "YearsMarried CustomTokens should stay unknown when married-year export is missing for a spouse.");
         AssertEqual("externalTokenMissing", patch.UnknownKind, "YearsMarried kind mismatch.");
         AssertEqual("externalCustomToken", patch.ParsedType, "YearsMarried parsed type mismatch.");
         AssertContains(patch.ReasonZh, "年限未导出", "YearsMarried reasonZh mismatch.");
+    }
+
+
+    private static void Evaluate_YearsMarried_CustomToken_WhenKnown_Passes()
+    {
+        var node = CreateNode("400018b", "Tests.Years", "Years Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition
+        {
+            Key = "TheMightyAmondee.CustomTokens/YearsMarried |contains=1",
+            Value = "true"
+        });
+
+        var patch = new StoryStateEvaluator()
+            .Evaluate(new[] { node }, CreateBaseState(yearsMarriedKnown: true, yearsMarried: 1))
+            .Nodes.Single()
+            .PatchWhenConditions.Single();
+
+        AssertEqual(true, patch.IsKnown, "YearsMarried should evaluate when exported.");
+        AssertEqual(true, patch.Passed, "YearsMarried contains=1 should pass for one married year.");
+    }
+
+    private static void Evaluate_YearsMarried_CustomToken_WhenKnownZero_PassesContainsZero()
+    {
+        var node = CreateNode("400018c", "Tests.Years", "Years Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition
+        {
+            Key = "TheMightyAmondee.CustomTokens/YearsMarried |contains=0",
+            Value = "true"
+        });
+
+        var patch = new StoryStateEvaluator()
+            .Evaluate(new[] { node }, CreateBaseState(yearsMarriedKnown: true, yearsMarried: 0))
+            .Nodes.Single()
+            .PatchWhenConditions.Single();
+
+        AssertEqual(true, patch.IsKnown, "YearsMarried=0 should evaluate when exported.");
+        AssertEqual(true, patch.Passed, "YearsMarried contains=0 should pass for zero married years.");
+    }
+
+    private static void Evaluate_YearsMarried_CustomToken_BareCsv_WhenKnownZero_Passes()
+    {
+        var node = CreateNode("400018e", "Tests.Years", "Years Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition
+        {
+            Key = "TheMightyAmondee.CustomTokens/YearsMarried",
+            Value = "0, 1",
+            RawValue = "\"0, 1\""
+        });
+
+        var patch = new StoryStateEvaluator()
+            .Evaluate(new[] { node }, CreateBaseState(yearsMarriedKnown: true, yearsMarried: 0))
+            .Nodes.Single()
+            .PatchWhenConditions.Single();
+
+        AssertEqual(true, patch.IsKnown, "Bare YearsMarried CSV should evaluate when exported.");
+        AssertEqual(true, patch.Passed, "YearsMarried=0 should match bare CSV value 0, 1.");
+    }
+
+    private static void Evaluate_YearsMarried_CustomToken_NoSpouse_DefaultsToZero()
+    {
+        var node = CreateNode("400018d", "Tests.Years", "Years Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition
+        {
+            Key = "TheMightyAmondee.CustomTokens/YearsMarried |contains=0",
+            Value = "true"
+        });
+
+        var patch = new StoryStateEvaluator()
+            .Evaluate(new[] { node }, CreateBaseState())
+            .Nodes.Single()
+            .PatchWhenConditions.Single();
+
+        AssertEqual(true, patch.IsKnown, "No spouse should safely imply YearsMarried=0.");
+        AssertEqual(true, patch.Passed, "YearsMarried contains=0 should pass when no spouse is exported.");
     }
 
     private static void Evaluate_NonNumericBranchTargets_AreNotUnknown()
@@ -893,7 +1123,17 @@ internal static class StoryStateEvaluatorTests
         IEnumerable<string>? dialogueAnswers = null,
         IEnumerable<string>? seenEvents = null,
         bool dayEventsKnown = false,
-        IEnumerable<string>? dayEvents = null)
+        IEnumerable<string>? dayEvents = null,
+        bool farmhouseUpgradeKnown = false,
+        int? farmhouseUpgradeLevel = null,
+        bool dialogueAnswersKnown = false,
+        bool familyStateKnown = false,
+        IEnumerable<string>? pregnantPlayers = null,
+        IEnumerable<string>? havingChildPlayers = null,
+        bool yearsMarriedKnown = false,
+        int? yearsMarried = null,
+        bool activeQuestsKnown = false,
+        IEnumerable<string>? activeQuestIds = null)
     {
         return new RuntimeGameState
         {
@@ -919,9 +1159,20 @@ internal static class StoryStateEvaluatorTests
             EngagedTo = engagedTo,
             SpouseName = spouse,
             Spouse = spouse,
+            FarmhouseUpgradeKnown = farmhouseUpgradeKnown,
+            FarmhouseUpgradeLevel = farmhouseUpgradeLevel,
+            FamilyStateKnown = familyStateKnown,
+            PregnantPlayers = pregnantPlayers?.ToArray() ?? Array.Empty<string>(),
+            HavingChildPlayers = havingChildPlayers?.ToArray() ?? Array.Empty<string>(),
+            YearsMarriedKnown = yearsMarriedKnown,
+            YearsMarried = yearsMarried,
+            ActiveQuestsKnown = activeQuestsKnown,
+            ActiveQuestIds = new HashSet<string>(activeQuestIds ?? Array.Empty<string>(), StringComparer.Ordinal),
             SeenEvents = new HashSet<string>(seenEvents ?? new[] { "100001" }, StringComparer.Ordinal),
             Mail = new HashSet<string>(mail ?? new[] { "someMail" }, StringComparer.Ordinal),
-            DialogueAnswers = new HashSet<string>(dialogueAnswers ?? new[] { "ShaneAnswerA" }, StringComparer.Ordinal)
+            DialogueAnswers = new HashSet<string>(dialogueAnswers ?? new[] { "ShaneAnswerA" }, StringComparer.Ordinal),
+            DialogueAnswersKnown = dialogueAnswersKnown,
+            DialogueAnswerIds = new HashSet<string>(dialogueAnswers ?? new[] { "ShaneAnswerA" }, StringComparer.Ordinal)
         };
     }
 

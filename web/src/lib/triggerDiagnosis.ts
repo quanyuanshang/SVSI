@@ -996,9 +996,50 @@ function formatRelationshipContainsDescriptionZh(
   return relationshipContainsDescriptionZh(contains.npc, contains.values, parseBooleanLike(value));
 }
 
+function parseYearsMarriedQuery(value?: string): { operator: string; threshold: string } | null {
+  const match = (value ?? "").match(/YearsMarried\}\}['"]?\s*(>=|<=|=|==|>|<)\s*(\d+)/i);
+  if (!match) {
+    return null;
+  }
+
+  return {
+    operator: match[1],
+    threshold: match[2],
+  };
+}
+
+function formatYearsMarriedExpectationZh(operator: string, threshold: string): string {
+  switch (operator) {
+    case ">=":
+      return `结婚年数至少 ${threshold} 年`;
+    case ">":
+      return `结婚年数超过 ${threshold} 年`;
+    case "<=":
+      return `结婚年数最多 ${threshold} 年`;
+    case "<":
+      return `结婚年数少于 ${threshold} 年`;
+    case "=":
+    case "==":
+      return `结婚年数为 ${threshold} 年`;
+    default:
+      return `结婚年数满足 ${operator} ${threshold}`;
+  }
+}
+
+function parseYearsMarriedActualFromReason(reason?: string): string | null {
+  return reason?.match(/value is (\d+)/i)?.[1] ?? null;
+}
+
 function formatPatchWhenDescriptionZh(key?: string, value?: string): string {
   if (!key) {
     return "CP When 条件";
+  }
+
+  if (key === "Query") {
+    const yearsMarried = parseYearsMarriedQuery(value);
+    if (yearsMarried) {
+      return formatYearsMarriedExpectationZh(yearsMarried.operator, yearsMarried.threshold);
+    }
   }
 
   if (key.startsWith("Hearts:")) {
@@ -1020,6 +1061,10 @@ function formatPatchWhenDescriptionZh(key?: string, value?: string): string {
     return "CP 模组安装条件";
   }
 
+  if (key === "DayEvent" || key.startsWith("DayEvent ")) {
+    return value ? `节日/特殊日前置条件：需要 ${value}` : "节日/特殊日前置条件";
+  }
+
   if (key === "FarmerCheater") {
     return "CP 多伴侣兼容条件";
   }
@@ -1030,6 +1075,18 @@ function formatPatchWhenDescriptionZh(key?: string, value?: string): string {
 function formatKnownPatchWhenReasonZh(patch: NonNullable<StoryNodeEvaluation["patchWhenConditions"]>[number]): string {
   const key = patch.key ?? "When";
   const value = patch.value ?? patch.rawValue ?? "";
+
+  if (key === "Query") {
+    const yearsMarried = parseYearsMarriedQuery(value);
+    if (yearsMarried) {
+      const expectation = formatYearsMarriedExpectationZh(yearsMarried.operator, yearsMarried.threshold);
+      const actual = parseYearsMarriedActualFromReason(patch.reason);
+      const actualText = actual ? `当前为 ${actual} 年` : "当前年数未知";
+      return patch.passed === false
+        ? `${expectation}，${actualText}，条件不满足`
+        : `${expectation}，${actualText}，条件已满足`;
+    }
+  }
 
   if (key.startsWith("Hearts:")) {
     const npc = key.slice("Hearts:".length).split("|")[0]?.trim();
@@ -1060,6 +1117,16 @@ function formatKnownPatchWhenReasonZh(patch: NonNullable<StoryNodeEvaluation["pa
       : "模组条件已满足：当前已安装模组符合该剧情要求";
   }
 
+  if (key === "DayEvent" || key.startsWith("DayEvent ")) {
+    if (patch.reasonZh) {
+      return patch.reasonZh;
+    }
+
+    return patch.passed === false
+      ? `节日/特殊日条件不满足：需要 ${value}`
+      : `节日/特殊日条件已满足：${value}`;
+  }
+
   if (key === "FarmerCheater") {
     return patch.passed === false
       ? "多伴侣兼容条件不满足：当前玩家状态不符合该剧情要求"
@@ -1083,6 +1150,46 @@ function createItem(condition: ParsedCondition, evaluation: AtomEvaluation): Dia
     reasonRaw: evaluation.reasonRaw,
     expectedZh: evaluation.expectedZh,
     actualZh: evaluation.actualZh,
+  };
+}
+
+function createResolvedMinFriendshipItem(
+  condition: ParsedCondition,
+  node: StoryNodeEvaluation,
+): DiagnosticItem | null {
+  if (condition.type !== "friendship" || typeof condition.value !== "string" || !/MinFriendship/i.test(condition.value)) {
+    return null;
+  }
+
+  const atom = node.conditionResult?.atomResults?.find((entry) =>
+    entry.atomType === "Friendship"
+    && typeof entry.raw === "string"
+    && /\s\d+\s*$/.test(entry.raw)
+    && entry.passed !== null
+    && entry.passed !== undefined,
+  );
+  if (!atom?.raw) {
+    return null;
+  }
+
+  const parsed = atom.raw.match(/(?:Friendship|f)\s+(.+?)\s+(\d+)\s*$/i);
+  const target = parsed?.[1]?.trim() || condition.target || "目标角色";
+  const threshold = parsed?.[2]?.trim() || "动态阈值";
+  const actual = atom.reason?.match(/has\s+(\d+)/i)?.[1];
+  const status: EvalOutcome = atom.passed ? "satisfied" : "unsatisfied";
+
+  return {
+    conditionRaw: condition.raw,
+    status,
+    type: "friendship",
+    negated: condition.negated,
+    descriptionZh: `${npcZh(target)}好感度至少 ${threshold}`,
+    reasonZh: atom.passed
+      ? `好感度满足：${npcZh(target)}当前好感度已达到 ${actual ?? threshold}`
+      : `好感度不满足：${npcZh(target)}当前好感度为 ${actual ?? "未知"}，需要至少 ${threshold}`,
+    reasonRaw: atom.reason,
+    expectedZh: `${npcZh(target)}好感度至少 ${threshold}`,
+    actualZh: actual ? `${npcZh(target)}好感度 ${actual}` : undefined,
   };
 }
 
@@ -1167,6 +1274,17 @@ export function diagnoseEventTrigger(
   }
 
   for (const condition of conditions) {
+    const resolvedMinFriendshipItem = createResolvedMinFriendshipItem(condition, node);
+    if (resolvedMinFriendshipItem) {
+      if (resolvedMinFriendshipItem.status === "satisfied") {
+        satisfied.push(resolvedMinFriendshipItem);
+      } else {
+        unsatisfied.push(resolvedMinFriendshipItem);
+      }
+
+      continue;
+    }
+
     const evaluation = evaluateAtom(condition, state, options);
     const item = createItem(condition, evaluation);
 
@@ -1225,18 +1343,25 @@ export function diagnoseEventTrigger(
 
     const patchRaw = `${patch.key ?? "When"}: ${patch.value ?? patch.rawValue ?? ""}`;
     if (patch.unknownKind === "runtimeMissing") {
+      const runtimeMissingPrefix = "\u65e0\u6cd5\u5224\u65ad\uff1a";
+      const runtimeMissingFallback = "\u8fd0\u884c\u65f6\u72b6\u6001\u7f3a\u5931";
+      const noRawValue = "\u65e0\u539f\u59cb\u503c";
+      const reasonZh = patch.reasonZh?.startsWith(runtimeMissingPrefix)
+        ? patch.reasonZh
+        : `${runtimeMissingPrefix}${patch.reasonZh ?? patch.reason ?? runtimeMissingFallback}`;
       unknown.push({
         conditionRaw: patchRaw,
         status: "unknown",
         type: "unknown",
         negated: false,
         descriptionZh: formatPatchWhenDescriptionZh(patch.key, patch.value),
-        reasonZh: `无法判断：${patch.reasonZh ?? patch.reason ?? "运行时状态缺失"}`,
+        reasonZh,
         reasonRaw: patch.reason,
-        actualZh: patch.value ?? patch.rawValue ?? "无原始值",
+        actualZh: patch.value ?? patch.rawValue ?? noRawValue,
       });
       continue;
     }
+
 
     if (patch.unknownKind === "complexQueryUnsupported") {
       unknown.push({

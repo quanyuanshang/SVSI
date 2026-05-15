@@ -23,6 +23,7 @@ public sealed class RuntimeStateCollector
         }
 
         var game1Type = typeof(Game1);
+        var year = GetStaticInt(game1Type, "year");
         var season = GetStaticString(game1Type, "currentSeason");
         var dayOfMonth = GetStaticInt(game1Type, "dayOfMonth");
         var player = GetStaticMemberValue(game1Type, "player");
@@ -34,10 +35,20 @@ public sealed class RuntimeStateCollector
         var inUpgradedHouse = DetermineInUpgradedHouse(player, currentLocation);
         var farmhouseSnapshot = CollectFarmhouseUpgrade(player, inUpgradedHouse);
         var spouseBedSnapshot = CollectSpouseBed(relationships, inUpgradedHouse);
+        var dialogueAnswers = CollectStringSet(
+            player,
+            "dialogueQuestionsAnswered",
+            "dialogueQuestionsAnsweredThisSeason",
+            "dialogueAnswers"
+        );
+        var inventorySnapshot = CollectInventoryItems(player);
+        var familySnapshot = CollectFamilyState(player, relationships);
+        var marriageSnapshot = CollectMarriageState(player, relationships, year, season, dayOfMonth);
+        var activeQuestSnapshot = CollectActiveQuests(player);
 
         return new RuntimeGameState
         {
-            Year = GetStaticInt(game1Type, "year"),
+            Year = year,
             Season = season,
             DayOfMonth = dayOfMonth,
             DayOfWeek = ResolveDayOfWeek(game1Type, season, dayOfMonth),
@@ -61,18 +72,28 @@ public sealed class RuntimeStateCollector
             InUpgradedHouse = inUpgradedHouse,
             FarmhouseUpgradeKnown = farmhouseSnapshot.Known,
             FarmhouseUpgradeLevel = farmhouseSnapshot.Level,
+            FamilyStateKnown = familySnapshot.Known,
+            PregnantPlayers = familySnapshot.PregnantPlayers,
+            HavingChildPlayers = familySnapshot.HavingChildPlayers,
+            ChildrenCount = familySnapshot.ChildrenCount,
+            ChildGenders = familySnapshot.ChildGenders,
+            YearsMarriedKnown = marriageSnapshot.Known,
+            YearsMarried = marriageSnapshot.YearsMarried,
+            AnniversarySeason = marriageSnapshot.AnniversarySeason,
+            AnniversaryDay = marriageSnapshot.AnniversaryDay,
+            HasItemKnown = inventorySnapshot.Known,
+            InventoryItemIds = inventorySnapshot.ItemIds,
             SpouseBedKnown = spouseBedSnapshot.Known,
             HasSpouseBed = spouseBedSnapshot.HasBed,
             SeenEvents = CollectStringSet(player, "eventsSeen"),
             Mail = CollectStringSet(player, "mailReceived"),
-            DialogueAnswers = CollectStringSet(
-                player,
-                "dialogueQuestionsAnswered",
-                "dialogueQuestionsAnsweredThisSeason",
-                "dialogueAnswers"
-            ),
+            DialogueAnswers = dialogueAnswers,
+            DialogueAnswersKnown = true,
+            DialogueAnswerIds = new HashSet<string>(dialogueAnswers, StringComparer.Ordinal),
             ActiveDialogueEventsKnown = activeDialogueSnapshot.Known,
-            ActiveDialogueEvents = activeDialogueSnapshot.Events
+            ActiveDialogueEvents = activeDialogueSnapshot.Events,
+            ActiveQuestsKnown = activeQuestSnapshot.Known,
+            ActiveQuestIds = activeQuestSnapshot.QuestIds
         };
     }
 
@@ -149,6 +170,13 @@ public sealed class RuntimeStateCollector
         public bool Known { get; init; }
 
         public HashSet<string> Events { get; init; } = new(StringComparer.Ordinal);
+    }
+
+    private sealed class ActiveQuestSnapshot
+    {
+        public bool Known { get; init; }
+
+        public HashSet<string> QuestIds { get; init; } = new(StringComparer.Ordinal);
     }
 
     private static HashSet<string> CollectInstalledModIds(IModRegistry? modRegistry)
@@ -610,6 +638,11 @@ public sealed class RuntimeStateCollector
             return value;
         }
 
+        if (TryInvokeStaticBool(game1Type, out value, "isFestival", "IsFestival"))
+        {
+            return value;
+        }
+
         return null;
     }
 
@@ -637,6 +670,400 @@ public sealed class RuntimeStateCollector
         public bool Known { get; init; }
 
         public int? Level { get; init; }
+    }
+
+    private sealed class InventorySnapshot
+    {
+        public bool Known { get; init; }
+
+        public HashSet<string> ItemIds { get; init; } = new(StringComparer.Ordinal);
+    }
+
+    private sealed class FamilyStateSnapshot
+    {
+        public bool Known { get; init; }
+
+        public string[] PregnantPlayers { get; init; } = Array.Empty<string>();
+
+        public string[] HavingChildPlayers { get; init; } = Array.Empty<string>();
+
+        public int? ChildrenCount { get; init; }
+
+        public string[] ChildGenders { get; init; } = Array.Empty<string>();
+    }
+
+    private sealed class MarriageSnapshot
+    {
+        public bool Known { get; init; }
+
+        public int? YearsMarried { get; init; }
+
+        public string? AnniversarySeason { get; init; }
+
+        public int? AnniversaryDay { get; init; }
+    }
+
+    private static InventorySnapshot CollectInventoryItems(object? player)
+    {
+        var results = new HashSet<string>(StringComparer.Ordinal);
+        var items = GetMemberValue(player, "Items") ?? GetMemberValue(player, "items");
+        if (items is not IEnumerable enumerable)
+        {
+            return new InventorySnapshot { Known = false, ItemIds = results };
+        }
+
+        foreach (var entry in enumerable)
+        {
+            var item = UnwrapNetValue(entry);
+            if (item is null)
+            {
+                continue;
+            }
+
+            foreach (var value in new[]
+            {
+                ConvertToString(GetMemberValue(item, "QualifiedItemId")),
+                ConvertToString(GetMemberValue(item, "ItemId")),
+                ConvertToString(GetMemberValue(item, "ParentSheetIndex")),
+                ConvertToString(GetMemberValue(item, "Name")),
+                ConvertToString(GetMemberValue(item, "DisplayName"))
+            })
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    results.Add(value.Trim());
+                }
+            }
+        }
+
+        return new InventorySnapshot { Known = true, ItemIds = results };
+    }
+
+    private static FamilyStateSnapshot CollectFamilyState(object? player, RelationshipState relationships)
+    {
+        var childGenders = new List<string>();
+        var childrenCount = TryCollectChildren(player, childGenders, out var hasChildrenData);
+        var daysUntilBirthing = ExtractInt(player, "DaysUntilBirthing", "daysUntilBirthing");
+        var nextBirthingDate = GetMemberValue(player, "NextBirthingDate") ?? GetMemberValue(player, "nextBirthingDate");
+        var canGetPregnant = GetBoolMemberValue(player, "CanGetPregnant", "canGetPregnant", "CanHavePregnancy", "canHavePregnancy");
+        var hasPendingChild = (daysUntilBirthing is int birthingDays && birthingDays >= 0)
+            || nextBirthingDate is not null;
+
+        var hasFamilyData = hasChildrenData || daysUntilBirthing is not null || nextBirthingDate is not null || canGetPregnant.HasValue;
+        if (!hasFamilyData)
+        {
+            return new FamilyStateSnapshot { Known = false };
+        }
+
+        var pregnantPlayers = new HashSet<string>(StringComparer.Ordinal);
+        var havingChildPlayers = new HashSet<string>(StringComparer.Ordinal);
+        var playerName = NormalizeOptionalName(GetStringMemberValue(player, "Name", "name"));
+
+        if (hasPendingChild && playerName is not null)
+        {
+            havingChildPlayers.Add(playerName);
+            if (canGetPregnant == true)
+            {
+                pregnantPlayers.Add(playerName);
+            }
+        }
+
+        return new FamilyStateSnapshot
+        {
+            Known = true,
+            PregnantPlayers = pregnantPlayers.OrderBy(static name => name, StringComparer.Ordinal).ToArray(),
+            HavingChildPlayers = havingChildPlayers.OrderBy(static name => name, StringComparer.Ordinal).ToArray(),
+            ChildrenCount = childrenCount,
+            ChildGenders = childGenders.ToArray()
+        };
+    }
+
+    private static MarriageSnapshot CollectMarriageState(
+        object? player,
+        RelationshipState relationships,
+        int currentYear,
+        string currentSeason,
+        int currentDayOfMonth)
+    {
+        var daysMarried = ExtractInt(player, "daysMarried", "DaysMarried");
+        var weddingDate = GetMemberValue(player, "weddingDate") ?? GetMemberValue(player, "WeddingDate");
+        if (daysMarried is null && weddingDate is null && TryCollectMarriageStateFromFriendships(player, currentYear, currentSeason, currentDayOfMonth, out var friendshipMarriage))
+        {
+            return friendshipMarriage;
+        }
+
+        if (daysMarried is null && weddingDate is null)
+        {
+            if (relationships.SpouseName is null
+                && relationships.Spouse is null
+                && relationships.MarriedTo is null
+                && (relationships.Spouses is null || relationships.Spouses.Length == 0))
+            {
+                return new MarriageSnapshot { Known = true, YearsMarried = 0 };
+            }
+
+            return new MarriageSnapshot { Known = false };
+        }
+
+        return new MarriageSnapshot
+        {
+            Known = true,
+            YearsMarried = daysMarried.HasValue ? Math.Max(0, daysMarried.Value / 112) : null,
+            AnniversarySeason = GetStringMemberValue(weddingDate, "Season", "season"),
+            AnniversaryDay = ExtractInt(weddingDate, "Day", "day", "DayOfMonth", "dayOfMonth")
+        };
+    }
+
+    private static bool TryCollectMarriageStateFromFriendships(
+        object? player,
+        int currentYear,
+        string currentSeason,
+        int currentDayOfMonth,
+        out MarriageSnapshot snapshot)
+    {
+        snapshot = new MarriageSnapshot { Known = false };
+        var friendshipData = GetMemberValue(player, "friendshipData");
+        if (friendshipData is null)
+        {
+            return false;
+        }
+
+        var enumerationSources = new[]
+        {
+            GetMemberValue(friendshipData, "FieldDict"),
+            GetMemberValue(friendshipData, "Pairs"),
+            friendshipData
+        };
+
+        foreach (var source in enumerationSources)
+        {
+            if (TryCollectMarriageStateFromFriendshipEnumerable(source, currentYear, currentSeason, currentDayOfMonth, out snapshot))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryCollectMarriageStateFromFriendshipEnumerable(
+        object? source,
+        int currentYear,
+        string currentSeason,
+        int currentDayOfMonth,
+        out MarriageSnapshot snapshot)
+    {
+        snapshot = new MarriageSnapshot { Known = false };
+        if (source is null)
+        {
+            return false;
+        }
+
+        if (source is IDictionary dictionary)
+        {
+            foreach (DictionaryEntry pair in dictionary)
+            {
+                if (TryCreateMarriageSnapshotFromFriendship(pair.Value, currentYear, currentSeason, currentDayOfMonth, out snapshot))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        if (source is not IEnumerable enumerable)
+        {
+            return false;
+        }
+
+        foreach (var entry in enumerable)
+        {
+            if (TryCreateMarriageSnapshotFromFriendship(GetMemberValue(entry, "Value"), currentYear, currentSeason, currentDayOfMonth, out snapshot))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool TryCreateMarriageSnapshotFromFriendship(
+        object? rawFriendship,
+        int currentYear,
+        string currentSeason,
+        int currentDayOfMonth,
+        out MarriageSnapshot snapshot)
+    {
+        snapshot = new MarriageSnapshot { Known = false };
+        var friendship = UnwrapNetValue(rawFriendship);
+        if (!IsMarriedFriendship(friendship))
+        {
+            return false;
+        }
+
+        var daysMarried = ExtractInt(friendship, "daysMarried", "DaysMarried", "daysUntilMarriage", "DaysUntilMarriage");
+        var weddingDate = GetMemberValue(friendship, "weddingDate") ?? GetMemberValue(friendship, "WeddingDate");
+        var anniversarySeason = GetStringMemberValue(weddingDate, "Season", "season");
+        var anniversaryDay = ExtractInt(weddingDate, "Day", "day", "DayOfMonth", "dayOfMonth");
+        if (daysMarried is null && weddingDate is not null)
+        {
+            daysMarried = EstimateDaysSinceWedding(weddingDate, currentYear, currentSeason, currentDayOfMonth);
+        }
+
+        if (daysMarried is null && weddingDate is null)
+        {
+            return false;
+        }
+
+        snapshot = new MarriageSnapshot
+        {
+            Known = true,
+            YearsMarried = daysMarried.HasValue ? Math.Max(0, daysMarried.Value / 112) : null,
+            AnniversarySeason = anniversarySeason,
+            AnniversaryDay = anniversaryDay
+        };
+        return true;
+    }
+
+    private static int? EstimateDaysSinceWedding(object weddingDate, int currentYear, string currentSeason, int currentDayOfMonth)
+    {
+        var weddingYear = ExtractInt(weddingDate, "Year", "year");
+        var weddingSeason = GetStringMemberValue(weddingDate, "Season", "season");
+        var weddingDay = ExtractInt(weddingDate, "Day", "day", "DayOfMonth", "dayOfMonth");
+        if (weddingYear is null || string.IsNullOrWhiteSpace(weddingSeason) || weddingDay is null)
+        {
+            return null;
+        }
+
+        var currentAbsoluteDay = ToAbsoluteStardewDay(currentYear, currentSeason, currentDayOfMonth);
+        var weddingAbsoluteDay = ToAbsoluteStardewDay(weddingYear.Value, weddingSeason, weddingDay.Value);
+        if (currentAbsoluteDay is null || weddingAbsoluteDay is null)
+        {
+            return null;
+        }
+
+        return Math.Max(0, currentAbsoluteDay.Value - weddingAbsoluteDay.Value);
+    }
+
+    private static int? ToAbsoluteStardewDay(int year, string season, int dayOfMonth)
+    {
+        var seasonIndex = season.Trim().ToLowerInvariant() switch
+        {
+            "spring" => 0,
+            "summer" => 1,
+            "fall" => 2,
+            "winter" => 3,
+            _ => (int?)null
+        };
+        if (seasonIndex is null)
+        {
+            return null;
+        }
+
+        return (Math.Max(1, year) - 1) * 112 + seasonIndex.Value * 28 + Math.Max(1, dayOfMonth);
+    }
+
+    private static ActiveQuestSnapshot CollectActiveQuests(object? player)
+    {
+        var results = new HashSet<string>(StringComparer.Ordinal);
+        var questLog = GetMemberValue(player, "questLog") ?? GetMemberValue(player, "QuestLog");
+        if (questLog is not IEnumerable enumerable)
+        {
+            return new ActiveQuestSnapshot { Known = false, QuestIds = results };
+        }
+
+        foreach (var entry in enumerable)
+        {
+            var quest = UnwrapNetValue(entry);
+            if (quest is null)
+            {
+                continue;
+            }
+
+            foreach (var value in new[]
+            {
+                ConvertToString(GetMemberValue(quest, "id")),
+                ConvertToString(GetMemberValue(quest, "Id")),
+                ConvertToString(GetMemberValue(quest, "questId")),
+                ConvertToString(GetMemberValue(quest, "QuestId")),
+                ConvertToString(GetMemberValue(quest, "questID")),
+                ConvertToString(GetMemberValue(quest, "QuestID"))
+            })
+            {
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    results.Add(value.Trim());
+                }
+            }
+        }
+
+        return new ActiveQuestSnapshot { Known = true, QuestIds = results };
+    }
+
+    private static int? TryCollectChildren(object? player, ICollection<string> childGenders, out bool known)
+    {
+        known = false;
+        var children = GetMemberValue(player, "Children") ?? GetMemberValue(player, "children");
+        if (children is IEnumerable enumerable)
+        {
+            var count = 0;
+            foreach (var entry in enumerable)
+            {
+                var child = UnwrapNetValue(entry);
+                if (child is null)
+                {
+                    continue;
+                }
+
+                count++;
+                var gender = GetChildGender(child);
+                if (!string.IsNullOrWhiteSpace(gender))
+                {
+                    childGenders.Add(gender);
+                }
+            }
+
+            known = true;
+            return count;
+        }
+
+        var countValue = ExtractInt(player, "childrenCount", "ChildrenCount", "numberOfChildren", "NumberOfChildren");
+        if (countValue is not null)
+        {
+            known = true;
+            return countValue;
+        }
+
+        var getChildrenCount = InvokeIntMethod(player, "getChildrenCount", "getNumberOfChildren");
+        if (getChildrenCount is not null)
+        {
+            known = true;
+            return getChildrenCount;
+        }
+
+        return null;
+    }
+
+    private static string? GetChildGender(object? child)
+    {
+        if (child is null)
+        {
+            return null;
+        }
+
+        var raw = ConvertToString(
+            UnwrapNetValue(
+                GetMemberValue(child, "Gender")
+                ?? GetMemberValue(child, "gender")
+                ?? GetMemberValue(child, "Age")
+                ?? GetMemberValue(child, "age")));
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return null;
+        }
+
+        return raw.Trim();
     }
 
     private static FarmhouseSnapshot CollectFarmhouseUpgrade(object? player, bool? inUpgradedHouse)
@@ -782,6 +1209,29 @@ public sealed class RuntimeStateCollector
         return false;
     }
 
+    private static bool TryInvokeStaticBool(Type type, out bool value, params string[] methodNames)
+    {
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
+        foreach (var methodName in methodNames)
+        {
+            var method = type.GetMethod(methodName, flags, null, Type.EmptyTypes, null);
+            if (method?.ReturnType != typeof(bool))
+            {
+                continue;
+            }
+
+            var result = method.Invoke(null, null);
+            if (result is bool boolResult)
+            {
+                value = boolResult;
+                return true;
+            }
+        }
+
+        value = false;
+        return false;
+    }
+
     private static object? GetStaticMemberValue(Type type, string memberName)
     {
         const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static;
@@ -821,6 +1271,50 @@ public sealed class RuntimeStateCollector
         if (field is not null)
         {
             return field.GetValue(instance);
+        }
+
+        return null;
+    }
+
+    private static int? InvokeIntMethod(object? instance, params string[] methodNames)
+    {
+        if (instance is null)
+        {
+            return null;
+        }
+
+        const BindingFlags flags = BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance;
+        foreach (var methodName in methodNames)
+        {
+            var method = instance.GetType().GetMethod(
+                methodName,
+                flags,
+                binder: null,
+                types: Type.EmptyTypes,
+                modifiers: null);
+            if (method is null)
+            {
+                continue;
+            }
+
+            try
+            {
+                var result = method.Invoke(instance, null);
+                if (result is int intValue)
+                {
+                    return intValue;
+                }
+
+                var parsed = ExtractInt(result);
+                if (parsed is not null)
+                {
+                    return parsed;
+                }
+            }
+            catch
+            {
+                // Ignore reflection failures and keep probing fallbacks.
+            }
         }
 
         return null;

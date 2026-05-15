@@ -203,6 +203,50 @@ describe("diagnoseEventTrigger", () => {
     expect(item?.reasonZh).not.toContain("杩");
   });
 
+  it("shows evaluated DayEvent patch When as a normal event precondition", () => {
+    const node = makeNode({
+      patchWhenConditions: [
+        {
+          key: "DayEvent",
+          value: "wedding",
+          isKnown: true,
+          passed: false,
+          isContextSensitive: true,
+          reason: "DayEvent failed: current day events are [], expected wedding.",
+          reasonZh: "今日事件不满足：当前为 []，需要 wedding",
+        },
+      ],
+    });
+
+    const result = diagnoseEventTrigger(node, baseState);
+    const item = result.unsatisfied.find((entry) => entry.conditionRaw === "DayEvent: wedding");
+    expect(item?.descriptionZh).toContain("节日/特殊日");
+    expect(item?.descriptionZh).not.toContain("CP When 条件");
+    expect(item?.reasonZh).toContain("今日事件不满足");
+  });
+
+  it("shows evaluated YearsMarried Query with concrete marriage-year copy", () => {
+    const node = makeNode({
+      patchWhenConditions: [
+        {
+          key: "Query",
+          value: "'{{TheMightyAmondee.CustomTokens/YearsMarried}}' >= 1",
+          isKnown: true,
+          passed: false,
+          isProgressionSensitive: true,
+          reason: "Query YearsMarried failed: value is 0.",
+        },
+      ],
+    });
+
+    const result = diagnoseEventTrigger(node, baseState);
+    const item = result.unsatisfied.find((entry) => entry.conditionRaw.includes("YearsMarried"));
+    expect(item?.descriptionZh).toContain("结婚年数至少 1 年");
+    expect(item?.descriptionZh).not.toContain("CP When 条件");
+    expect(item?.reasonZh).toContain("当前为 0 年");
+    expect(item?.reasonZh).not.toContain("Query");
+  });
+
   it("evaluates day-of-month list u 12 19 20", () => {
     const node = makeNode({ rawPreconditions: ["u 12 19 20"] });
     const result = diagnoseEventTrigger(node, baseState);
@@ -438,6 +482,42 @@ describe("diagnoseEventTrigger", () => {
     );
     expect(item?.descriptionZh).toBe("不能和塞巴斯蒂安处于订婚状态");
     expect(result.unknown.some((entry) => entry.conditionRaw.includes("Relationship:Sebastian"))).toBe(false);
+  });
+
+  it("uses backend-resolved friendship atoms for MinFriendship instead of reporting unknown", () => {
+    const node = makeNode({
+      rawPreconditions: ["f Wizard {{MinFriendship}}"],
+      conditionResult: {
+        atomResults: [
+          {
+            raw: "f Wizard 2500",
+            atomType: "Friendship",
+            passed: false,
+            reason: "Friendship failed: Wizard has 2000, requires at least 2500.",
+          },
+        ],
+      },
+    });
+    const result = diagnoseEventTrigger(node, { ...baseState, friendship: { ...baseState.friendship, Wizard: 2000 } });
+    expect(result.unknown.some((i) => i.conditionRaw.includes("MinFriendship"))).toBe(false);
+    expect(result.unsatisfied.some((i) => i.conditionRaw.includes("MinFriendship"))).toBe(true);
+  });
+
+  it("does not duplicate runtimeMissing Chinese prefix from backend patch reasons", () => {
+    const node = makeNode({
+      patchWhenConditions: [
+        {
+          key: "Pregnant",
+          value: "true",
+          isKnown: false,
+          unknownKind: "runtimeMissing",
+          reasonZh: "无法判断：运行时家庭状态未导出（Pregnant）。",
+        },
+      ],
+    });
+    const result = diagnoseEventTrigger(node, baseState);
+    const item = result.unknown.find((entry) => entry.conditionRaw.includes("Pregnant"));
+    expect(item?.reasonZh).toBe("无法判断：运行时家庭状态未导出（Pregnant）。");
   });
 
   it("keeps unsupported patch-when conditions in unknown", () => {

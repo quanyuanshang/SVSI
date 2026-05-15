@@ -50,7 +50,7 @@ public sealed class StoryNodeStatusClassifier
                 node,
                 conditionResult,
                 StoryNodeStatus.Locked,
-                $"Patch-level progression conditions failed: {string.Join("; ", failedPatchWhenConditions.Select(condition => condition.Reason))}"
+                $"Patch-level progression conditions failed: {string.Join("; ", failedPatchWhenConditions.Select(FormatPatchWhenReasonZh))}"
             );
         }
 
@@ -63,7 +63,7 @@ public sealed class StoryNodeStatusClassifier
                 node,
                 conditionResult,
                 StoryNodeStatus.AvailableLater,
-                $"Patch-level context conditions are not currently met: {string.Join("; ", failedContextPatchWhenConditions.Select(condition => condition.Reason))}"
+                $"Patch-level context conditions are not currently met: {string.Join("; ", failedContextPatchWhenConditions.Select(FormatPatchWhenReasonZh))}"
             );
         }
 
@@ -267,8 +267,12 @@ public sealed class StoryNodeStatusClassifier
 
     private static string FormatPatchWhenReasonZh(PatchWhenCondition condition)
     {
-        return !string.IsNullOrWhiteSpace(condition.ReasonZh)
+        var reason = !string.IsNullOrWhiteSpace(condition.ReasonZh)
             ? condition.ReasonZh
             : condition.Reason;
+        const string duplicatePrefix = "无法判断：";
+        return reason.StartsWith(duplicatePrefix, StringComparison.Ordinal)
+            ? reason[duplicatePrefix.Length..]
+            : reason;
     }
 }
