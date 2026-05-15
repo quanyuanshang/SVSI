@@ -46,11 +46,20 @@ public sealed class EventIndexBuilder
             .Select(group => group.Last())
             .ToList();
 
+        var modConfigs = scannedMods
+            .Where(mod => !string.IsNullOrWhiteSpace(mod.UniqueID))
+            .GroupBy(mod => mod.UniqueID.Trim(), StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                group => group.Key,
+                group => new Dictionary<string, string>(group.Last().ConfigValues, StringComparer.OrdinalIgnoreCase),
+                StringComparer.OrdinalIgnoreCase);
+
         return new StoryRawEventIndex
         {
             GeneratedAtUtc = DateTimeOffset.UtcNow,
             NodeCount = distinctNodes.Count,
-            Nodes = distinctNodes
+            Nodes = distinctNodes,
+            ModConfigByUniqueId = modConfigs
         };
     }
 
@@ -347,7 +356,7 @@ public sealed class EventIndexBuilder
     {
         var location = ExtractLocation(assetTarget);
         var keySplit = this.eventKeySplitter.Split(rawKey);
-        var parsedConditions = this.ParsePreconditions(keySplit.PreconditionFragments, dynamicTokens);
+        var parsedConditions = this.ParsePreconditions(keySplit.PreconditionFragments, dynamicTokens, mod);
         var fingerprint = $"{mod.UniqueID}|{assetTarget}|{rawKey}|{string.Join("|", evidenceRefs.Select(refItem => refItem.SourcePath + "::" + refItem.JsonPath))}";
 
         return new StoryNode
@@ -380,7 +389,8 @@ public sealed class EventIndexBuilder
 
     private EventPreconditionParseResult ParsePreconditions(
         IReadOnlyList<string> rawPreconditionFragments,
-        Dictionary<string, List<DynamicTokenDefinition>> dynamicTokens)
+        Dictionary<string, List<DynamicTokenDefinition>> dynamicTokens,
+        ScannedMod mod)
     {
         var children = new List<ConditionAstNode>();
         var unknownFragments = new List<string>();
@@ -393,7 +403,8 @@ public sealed class EventIndexBuilder
                 continue;
             }
 
-            var parsed = this.eventPreconditionParser.Parse(new[] { rawFragment });
+            var expandedFragment = ExpandBracedPlaceholders(rawFragment, mod, dynamicTokens, out _);
+            var parsed = this.eventPreconditionParser.Parse(new[] { expandedFragment });
             children.AddRange(parsed.ConditionAst.Children);
             unknownFragments.AddRange(parsed.UnknownFragments);
         }
@@ -407,6 +418,68 @@ public sealed class EventIndexBuilder
             },
             UnknownFragments = unknownFragments
         };
+    }
+
+    private static string ExpandBracedPlaceholders(
+        string fragment,
+        ScannedMod mod,
+        Dictionary<string, List<DynamicTokenDefinition>> dynamicTokens,
+        out List<string> unresolvedTokens)
+    {
+        var unresolved = new List<string>();
+        var result = Regex.Replace(
+            fragment,
+            @"\{\{([A-Za-z0-9_]+)\}\}",
+            match =>
+            {
+                var name = match.Groups[1].Value;
+                if (TryResolvePlaceholderValue(name, mod, dynamicTokens, out var replacement))
+                {
+                    return replacement;
+                }
+
+                unresolved.Add(name);
+                return match.Value;
+            });
+        unresolvedTokens = unresolved;
+        return result;
+    }
+
+    private static bool TryResolvePlaceholderValue(
+        string tokenName,
+        ScannedMod mod,
+        Dictionary<string, List<DynamicTokenDefinition>> dynamicTokens,
+        out string replacement)
+    {
+        replacement = string.Empty;
+        if (mod.ConfigValues.TryGetValue(tokenName, out var configValue) && !string.IsNullOrWhiteSpace(configValue))
+        {
+            replacement = configValue.Trim();
+            return true;
+        }
+
+        if (!dynamicTokens.TryGetValue(tokenName, out var definitions))
+        {
+            return false;
+        }
+
+        foreach (var definition in definitions)
+        {
+            var value = definition.Value?.Trim() ?? string.Empty;
+            if (value.Length > 0 && definition.WhenConditions.Count == 0)
+            {
+                replacement = value;
+                return true;
+            }
+
+            if (Regex.IsMatch(value, @"^\d+$"))
+            {
+                replacement = value;
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private bool TryExpandDynamicTokenFragment(

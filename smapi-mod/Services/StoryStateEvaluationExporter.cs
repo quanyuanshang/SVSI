@@ -17,7 +17,7 @@ public sealed class StoryStateEvaluationExporter
         this.storyStateEvaluator = storyStateEvaluator;
     }
 
-    public List<StoryNode> LoadStoryNodesFromFile(string storyIndexPath)
+    public StoryRawEventIndex LoadStoryRawEventIndex(string storyIndexPath)
     {
         var resolvedPath = EnsureFileExists(storyIndexPath, "Story index");
 
@@ -33,12 +33,17 @@ public sealed class StoryStateEvaluationExporter
                 throw new InvalidOperationException($"Story index file '{resolvedPath}' was empty or could not be deserialized.");
             }
 
-            return index.Nodes;
+            return index;
         }
         catch (JsonException ex)
         {
             throw new InvalidOperationException($"Failed to parse story index file '{resolvedPath}': {ex.Message}", ex);
         }
+    }
+
+    public List<StoryNode> LoadStoryNodesFromFile(string storyIndexPath)
+    {
+        return LoadStoryRawEventIndex(storyIndexPath).Nodes;
     }
 
     public RuntimeGameState LoadRuntimeStateFromFile(string runtimeStatePath)
@@ -90,9 +95,9 @@ public sealed class StoryStateEvaluationExporter
             throw new ArgumentException("Output path is required.", nameof(outputPath));
         }
 
-        var nodes = this.LoadStoryNodesFromFile(storyIndexPath);
+        var index = this.LoadStoryRawEventIndex(storyIndexPath);
         var state = this.LoadRuntimeStateFromFile(runtimeStatePath);
-        var report = this.storyStateEvaluator.Evaluate(nodes, state);
+        var report = this.storyStateEvaluator.Evaluate(index.Nodes, state, null, index.ModConfigByUniqueId);
 
         var outputDirectory = Path.GetDirectoryName(outputPath);
         if (!string.IsNullOrWhiteSpace(outputDirectory))

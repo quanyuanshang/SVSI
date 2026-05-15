@@ -50,7 +50,8 @@ public sealed class StoryNodeDialogueLinker
         {
             GeneratedAtUtc = storyIndex.GeneratedAtUtc,
             NodeCount = linkedNodes.Count,
-            Nodes = linkedNodes
+            Nodes = linkedNodes,
+            ModConfigByUniqueId = storyIndex.ModConfigByUniqueId
         };
     }
 

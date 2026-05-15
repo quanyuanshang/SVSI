@@ -33,13 +33,14 @@ public sealed class StoryStateEvaluator
     public StoryStateEvaluationReport Evaluate(
         IEnumerable<StoryNode> nodes,
         RuntimeGameState state,
-        TranslationCatalog? translationCatalog = null)
+        TranslationCatalog? translationCatalog = null,
+        IReadOnlyDictionary<string, Dictionary<string, string>>? modConfigByUniqueId = null)
     {
         var evaluations = nodes
             .Select(node =>
             {
                 var conditionResult = this.conditionEvaluator.Evaluate(node.ConditionAst, state);
-                var evaluatedNode = this.WithEvaluatedPatchWhenConditions(node, state);
+                var evaluatedNode = this.WithEvaluatedPatchWhenConditions(node, state, modConfigByUniqueId);
                 return this.statusClassifier.Classify(evaluatedNode, state, conditionResult);
             })
             .OrderBy(evaluation => GetStatusSortOrder(evaluation.Status))
@@ -199,7 +200,10 @@ public sealed class StoryStateEvaluator
         public List<string> ExampleEvents { get; } = new();
     }
 
-    private StoryNode WithEvaluatedPatchWhenConditions(StoryNode node, RuntimeGameState state)
+    private StoryNode WithEvaluatedPatchWhenConditions(
+        StoryNode node,
+        RuntimeGameState state,
+        IReadOnlyDictionary<string, Dictionary<string, string>>? modConfigByUniqueId)
     {
         if (node.PatchWhenConditions.Count == 0)
         {
@@ -217,7 +221,7 @@ public sealed class StoryStateEvaluator
             Location = node.Location,
             RawKey = node.RawKey,
             RawPreconditions = node.RawPreconditions,
-            PatchWhenConditions = this.EvaluatePatchWhenConditions(node, state),
+            PatchWhenConditions = this.EvaluatePatchWhenConditions(node, state, modConfigByUniqueId),
             ConditionAst = node.ConditionAst,
             UnknownFragments = node.UnknownFragments,
             RawScriptPreview = node.RawScriptPreview,
@@ -229,12 +233,15 @@ public sealed class StoryStateEvaluator
         };
     }
 
-    private List<PatchWhenCondition> EvaluatePatchWhenConditions(StoryNode node, RuntimeGameState state)
+    private List<PatchWhenCondition> EvaluatePatchWhenConditions(
+        StoryNode node,
+        RuntimeGameState state,
+        IReadOnlyDictionary<string, Dictionary<string, string>>? modConfigByUniqueId)
     {
         var results = new List<PatchWhenCondition>(node.PatchWhenConditions.Count);
         foreach (var condition in node.PatchWhenConditions)
         {
-            results.Add(this.EvaluatePatchWhenCondition(node, condition, state));
+            results.Add(this.EvaluatePatchWhenCondition(node, condition, state, modConfigByUniqueId));
         }
 
         return results;
@@ -243,13 +250,24 @@ public sealed class StoryStateEvaluator
     private PatchWhenCondition EvaluatePatchWhenCondition(
         StoryNode node,
         PatchWhenCondition condition,
-        RuntimeGameState state)
+        RuntimeGameState state,
+        IReadOnlyDictionary<string, Dictionary<string, string>>? modConfigByUniqueId)
     {
         condition = NormalizePatchWhenCondition(condition);
 
         if (TryClassifyKnownUnsupportedPatchWhen(condition, out var classifiedUnsupported))
         {
             return classifiedUnsupported;
+        }
+
+        if (TryEvaluateYearsMarriedCustomTokenPatchWhen(condition, out var yearsMarriedEvaluation))
+        {
+            return yearsMarriedEvaluation;
+        }
+
+        if (TryEvaluateCmctConfigPatchWhen(node, condition, modConfigByUniqueId, out var cmctEvaluation))
+        {
+            return cmctEvaluation;
         }
 
         if (TryEvaluateRelationshipCondition(condition, state, out var relationshipEvaluation))
@@ -302,14 +320,24 @@ public sealed class StoryStateEvaluator
             return dayEventEvaluation;
         }
 
+        if (TryEvaluateFarmhouseUpgradePatchWhen(condition, state, out var farmhouseEvaluation))
+        {
+            return farmhouseEvaluation;
+        }
+
         if (TryEvaluateConfigCondition(node, condition, out var configEvaluation))
         {
             return configEvaluation;
         }
 
-        if (TryEvaluateDynamicTokenValueCondition(node, condition, state, out var dynamicTokenEvaluation))
+        if (TryEvaluateDynamicTokenValueCondition(node, condition, state, modConfigByUniqueId, out var dynamicTokenEvaluation))
         {
             return dynamicTokenEvaluation;
+        }
+
+        if (TryEvaluateDatePatchWhen(node, condition, modConfigByUniqueId, out var dateEvaluation))
+        {
+            return dateEvaluation;
         }
 
         if (TryEvaluateFarmerCheaterCondition(node, condition, state, out var farmerCheaterEvaluation))
@@ -317,19 +345,19 @@ public sealed class StoryStateEvaluator
             return farmerCheaterEvaluation;
         }
 
-        if (TryEvaluateSimpleQueryCondition(node, condition, state, out var queryEvaluation))
+        if (TryEvaluateSimpleQueryCondition(node, condition, state, modConfigByUniqueId, out var queryEvaluation))
         {
             return queryEvaluation;
         }
 
         return CreateUnknownPatchWhenCondition(
             condition,
-            LooksLikeComplexQuery(condition)
+            LooksLikeComplexOrRandomPatchWhen(condition)
                 ? "Complex CP Query is not expanded."
                 : $"Patch-level When condition '{condition.Key}' is not evaluated.",
-            unknownKind: LooksLikeComplexQuery(condition) ? "complexQueryUnsupported" : "parseUnknown",
-            reasonZh: LooksLikeComplexQuery(condition)
-                ? "复杂 CP Query，暂未展开。"
+            unknownKind: LooksLikeComplexOrRandomPatchWhen(condition) ? "complexQueryUnsupported" : "parseUnknown",
+            reasonZh: LooksLikeComplexOrRandomPatchWhen(condition)
+                ? "随机/概率条件暂不展开。"
                 : $"未解析条件：{condition.Key}");
     }
 
@@ -641,16 +669,65 @@ public sealed class StoryStateEvaluator
     }
 
     private static bool TryEvaluateDayEventCondition(
-    PatchWhenCondition condition,
-    RuntimeGameState state,
-    out PatchWhenCondition evaluated)
+        PatchWhenCondition condition,
+        RuntimeGameState state,
+        out PatchWhenCondition evaluated)
     {
         evaluated = condition;
 
-        if (!TryParseTokenAndModifier(condition.Key, out var token, out _, out _, out _)
+        if (!TryParseTokenAndModifier(condition.Key, out var token, out _, out var modifierOp, out var modifierVal)
             || !string.Equals(token, "DayEvent", StringComparison.OrdinalIgnoreCase))
         {
             return false;
+        }
+
+        if (string.Equals(modifierOp, "contains", StringComparison.OrdinalIgnoreCase)
+            && TryReadContainsExpectation(condition, modifierOp, modifierVal, out var festivalCandidates, out var expectedListMatch))
+        {
+            if (!state.DayEventsKnown)
+            {
+                evaluated = CreateUnknownPatchWhenCondition(
+                    condition,
+                    $"DayEvent |contains runtime export is unavailable.",
+                    unknownKind: "runtimeMissing",
+                    reasonZh: "需要判断当前节日/特殊日是否在列表中，但运行时未导出 DayEvent 状态。",
+                    parsedType: "cpDayEvent");
+                return true;
+            }
+
+            static bool DayEventLabelMatches(string current, string candidate)
+            {
+                if (string.Equals(current, candidate, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                return current.Contains(candidate, StringComparison.OrdinalIgnoreCase)
+                    || candidate.Contains(current, StringComparison.OrdinalIgnoreCase);
+            }
+
+            var containsResult = festivalCandidates.Any(candidate =>
+                state.DayEvents.Any(dayEvent => DayEventLabelMatches(dayEvent, candidate)));
+
+            var listPassed = containsResult == expectedListMatch;
+            var listZh = string.Join("、", festivalCandidates);
+            var reasonZh = expectedListMatch
+                ? (listPassed
+                    ? $"今天需要是以下节日/特殊日之一（已满足）：{listZh}"
+                    : $"今天需要是以下节日/特殊日之一：{listZh}")
+                : (listPassed
+                    ? $"今天不能是以下节日/特殊日（已满足）：{listZh}"
+                    : $"今天不能是以下节日/特殊日：{listZh}");
+
+            evaluated = CreateEvaluatedPatchWhenCondition(
+                condition,
+                listPassed,
+                $"DayEvent contains matched: list intersection is {containsResult}, expected {expectedListMatch}.",
+                $"DayEvent contains failed: list intersection is {containsResult}, expected {expectedListMatch}.",
+                isContextSensitive: true,
+                isProgressionSensitive: false,
+                reasonZh: reasonZh);
+            return true;
         }
 
         var expected = condition.Value.Trim();
@@ -700,10 +777,259 @@ public sealed class StoryStateEvaluator
     }
 
 
+    private static bool TryEvaluateFarmhouseUpgradePatchWhen(
+        PatchWhenCondition condition,
+        RuntimeGameState state,
+        out PatchWhenCondition evaluated)
+    {
+        evaluated = condition;
+
+        if (!TryParseTokenAndModifier(condition.Key, out var token, out _, out var modOp, out var modVal)
+            || !string.Equals(token, "FarmhouseUpgrade", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (!state.FarmhouseUpgradeKnown)
+        {
+            evaluated = CreateUnknownPatchWhenCondition(
+                condition,
+                "FarmhouseUpgrade runtime export is unavailable.",
+                unknownKind: "runtimeMissing",
+                reasonZh: "当前暂无法判断农舍升级等级。",
+                parsedType: "cpFarmhouseUpgrade");
+            return true;
+        }
+
+        var level = state.FarmhouseUpgradeLevel ?? 0;
+
+        if (string.IsNullOrWhiteSpace(modOp))
+        {
+            if (!int.TryParse(condition.Value.Trim(), out var wantLevel))
+            {
+                return false;
+            }
+
+            var passedExact = level == wantLevel;
+            evaluated = CreateEvaluatedPatchWhenCondition(
+                condition,
+                passedExact,
+                $"FarmhouseUpgrade matched: level is {level}.",
+                $"FarmhouseUpgrade failed: level is {level}, expected {wantLevel}.",
+                isContextSensitive: false,
+                isProgressionSensitive: true);
+            return true;
+        }
+
+        if (string.Equals(modOp, "contains", StringComparison.OrdinalIgnoreCase)
+            && TryReadContainsExpectation(condition, modOp, modVal, out var parts, out var expectedBool))
+        {
+            var levels = new List<int>();
+            foreach (var part in parts)
+            {
+                if (int.TryParse(part.Trim(), out var parsedLevel))
+                {
+                    levels.Add(parsedLevel);
+                }
+            }
+
+            if (levels.Count == 0)
+            {
+                return false;
+            }
+
+            var contains = levels.Contains(level);
+            var passed = contains == expectedBool;
+            evaluated = CreateEvaluatedPatchWhenCondition(
+                condition,
+                passed,
+                $"FarmhouseUpgrade contains matched: level {level} in set [{string.Join(", ", levels)}] is {contains}.",
+                $"FarmhouseUpgrade contains failed: level {level} versus set [{string.Join(", ", levels)}].",
+                isContextSensitive: false,
+                isProgressionSensitive: true);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryEvaluateYearsMarriedCustomTokenPatchWhen(
+        PatchWhenCondition condition,
+        out PatchWhenCondition evaluated)
+    {
+        evaluated = condition;
+        if (!condition.Key.Contains("YearsMarried", StringComparison.OrdinalIgnoreCase)
+            || !condition.Key.Contains("CustomTokens", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        evaluated = CreateUnknownPatchWhenCondition(
+            condition,
+            "External CustomTokens YearsMarried is not exported at patch-eval time.",
+            unknownKind: "externalTokenMissing",
+            reasonZh: "外部 CustomTokens 年限未导出。",
+            parsedType: "externalCustomToken");
+        return true;
+    }
+
+    private static bool TryEvaluateCmctConfigPatchWhen(
+        StoryNode node,
+        PatchWhenCondition condition,
+        IReadOnlyDictionary<string, Dictionary<string, string>>? modConfigByUniqueId,
+        out PatchWhenCondition evaluated)
+    {
+        evaluated = condition;
+
+        if (!TryParseTokenAndModifier(condition.Key, out var token, out var argument, out var modOp, out var modVal)
+            || !string.Equals(token, "Spiderbuttons.CMCT/Config", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(argument))
+        {
+            return false;
+        }
+
+        var commaIdx = argument.IndexOf(',');
+        if (commaIdx <= 0 || commaIdx >= argument.Length - 1)
+        {
+            return false;
+        }
+
+        var targetModId = argument[..commaIdx].Trim();
+        var configKey = argument[(commaIdx + 1)..].Trim();
+        if (string.IsNullOrWhiteSpace(targetModId) || string.IsNullOrWhiteSpace(configKey))
+        {
+            return false;
+        }
+
+        if (modConfigByUniqueId is null
+            || !modConfigByUniqueId.TryGetValue(targetModId, out var cfg)
+            || !cfg.TryGetValue(configKey, out var actual)
+            || string.IsNullOrWhiteSpace(actual))
+        {
+            evaluated = CreateUnknownPatchWhenCondition(
+                condition,
+                $"CMCT target config not found for mod '{targetModId}', key '{configKey}'.",
+                unknownKind: "externalTokenMissing",
+                reasonZh: $"找不到 mod「{targetModId}」的配置项「{configKey}」。",
+                parsedType: "cmctConfig");
+            return true;
+        }
+
+        actual = actual.Trim();
+
+        if (string.Equals(modOp, "contains", StringComparison.OrdinalIgnoreCase))
+        {
+            var needle = (modVal ?? string.Empty).Trim();
+            var wantContains = TryParseBoolean(condition.Value, out var parsedExpected) ? parsedExpected : true;
+            var haystack = actual;
+            var contains = haystack.Contains(needle, StringComparison.OrdinalIgnoreCase);
+            var passed = contains == wantContains;
+            evaluated = CreateEvaluatedPatchWhenCondition(
+                condition,
+                passed,
+                $"CMCT Config matched: {targetModId}/{configKey}={actual}.",
+                $"CMCT Config failed: {targetModId}/{configKey}={actual}, expected contains {needle} ({wantContains}).",
+                isContextSensitive: false,
+                isProgressionSensitive: true);
+            return true;
+        }
+
+        var expectedValues = SplitCsv(condition.Value);
+        if (expectedValues.Count == 0)
+        {
+            expectedValues.Add(condition.Value.Trim());
+        }
+
+        var passedExact = expectedValues.Any(expected =>
+            string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase));
+        evaluated = CreateEvaluatedPatchWhenCondition(
+            condition,
+            passedExact,
+            $"CMCT Config matched: {targetModId}/{configKey}={actual}.",
+            $"CMCT Config failed: {targetModId}/{configKey}={actual}, expected {condition.Value}.",
+            isContextSensitive: false,
+            isProgressionSensitive: true);
+        return true;
+    }
+
+    private static bool TryEvaluateDatePatchWhen(
+        StoryNode node,
+        PatchWhenCondition condition,
+        IReadOnlyDictionary<string, Dictionary<string, string>>? modConfigByUniqueId,
+        out PatchWhenCondition evaluated)
+    {
+        evaluated = condition;
+
+        if (!string.Equals(condition.Key.Trim(), "Date", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(condition.Value))
+        {
+            return false;
+        }
+
+        var resolved = TryResolvePatchWhenDateValue(node, modConfigByUniqueId);
+        if (resolved is null)
+        {
+            evaluated = CreateUnknownPatchWhenCondition(
+                condition,
+                "Date CP When token is not exported from config or dynamic tokens.",
+                unknownKind: "externalTokenMissing",
+                reasonZh: "CP When Date 未能从本包配置、动态 token 或其他 mod 配置中解析。",
+                parsedType: "cpDate");
+            return true;
+        }
+
+        var passed = string.Equals(resolved.Trim(), condition.Value.Trim(), StringComparison.OrdinalIgnoreCase);
+        evaluated = CreateEvaluatedPatchWhenCondition(
+            condition,
+            passed,
+            $"Date matched: resolved '{resolved}'.",
+            $"Date failed: resolved '{resolved}', expected '{condition.Value.Trim()}'.",
+            isProgressionSensitive: true,
+            reasonZh: passed
+                ? $"日期条件满足：{resolved}"
+                : $"日期条件不满足：当前解析为 {resolved}，需要 {condition.Value.Trim()}");
+        return true;
+    }
+
+    private static string? TryResolvePatchWhenDateValue(
+        StoryNode node,
+        IReadOnlyDictionary<string, Dictionary<string, string>>? modConfigByUniqueId)
+    {
+        if (node.SourceModConfigValues.TryGetValue("Date", out var d0) && !string.IsNullOrWhiteSpace(d0))
+        {
+            return d0.Trim();
+        }
+
+        if (node.SourceModDynamicTokens.TryGetValue("Date", out var defs))
+        {
+            foreach (var def in defs)
+            {
+                var v = def.Value?.Trim() ?? string.Empty;
+                if (v.Length > 0 && def.WhenConditions.Count == 0)
+                {
+                    return v;
+                }
+            }
+        }
+
+        if (modConfigByUniqueId is not null)
+        {
+            foreach (var pair in modConfigByUniqueId)
+            {
+                if (pair.Value.TryGetValue("Date", out var d1) && !string.IsNullOrWhiteSpace(d1))
+                {
+                    return d1.Trim();
+                }
+            }
+        }
+
+        return null;
+    }
+
     private static bool TryEvaluateConfigCondition(
-    StoryNode node,
-    PatchWhenCondition condition,
-    out PatchWhenCondition evaluated)
+        StoryNode node,
+        PatchWhenCondition condition,
+        out PatchWhenCondition evaluated)
     {
         evaluated = condition;
 
@@ -741,6 +1067,7 @@ public sealed class StoryStateEvaluator
         StoryNode node,
         PatchWhenCondition condition,
         RuntimeGameState state,
+        IReadOnlyDictionary<string, Dictionary<string, string>>? modConfigByUniqueId,
         out PatchWhenCondition evaluated)
     {
         evaluated = condition;
@@ -750,6 +1077,9 @@ public sealed class StoryStateEvaluator
             || tokenName.Contains('|', StringComparison.Ordinal)
             || string.Equals(tokenName, "Query", StringComparison.OrdinalIgnoreCase)
             || tokenName.StartsWith("Query:", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(tokenName, "Date", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(tokenName, "FarmhouseUpgrade", StringComparison.OrdinalIgnoreCase)
+            || tokenName.StartsWith("Spiderbuttons.CMCT/Config", StringComparison.OrdinalIgnoreCase)
             || tokenName.StartsWith("Pregnant", StringComparison.OrdinalIgnoreCase)
             || tokenName.StartsWith("HavingChild", StringComparison.OrdinalIgnoreCase))
         {
@@ -762,7 +1092,7 @@ public sealed class StoryStateEvaluator
         }
 
         var expectedValue = condition.Value.Trim();
-        var resolution = this.ResolveDynamicTokenValue(node, definitions, state);
+        var resolution = this.ResolveDynamicTokenValue(node, definitions, state, modConfigByUniqueId);
         if (resolution.HasUnknown)
         {
             evaluated = CreateUnknownPatchWhenCondition(
@@ -810,7 +1140,8 @@ public sealed class StoryStateEvaluator
     private DynamicTokenResolution ResolveDynamicTokenValue(
         StoryNode node,
         IReadOnlyList<DynamicTokenDefinition> definitions,
-        RuntimeGameState state)
+        RuntimeGameState state,
+        IReadOnlyDictionary<string, Dictionary<string, string>>? modConfigByUniqueId)
     {
         string? resolvedValue = null;
         var hasUnknown = false;
@@ -819,7 +1150,7 @@ public sealed class StoryStateEvaluator
 
         foreach (var definition in definitions)
         {
-            var branchResult = this.EvaluateDynamicTokenBranch(node, definition, state);
+            var branchResult = this.EvaluateDynamicTokenBranch(node, definition, state, modConfigByUniqueId);
             if (branchResult.HasUnknown)
             {
                 hasUnknown = true;
@@ -858,7 +1189,8 @@ public sealed class StoryStateEvaluator
     private BranchEvaluation EvaluateDynamicTokenBranch(
         StoryNode node,
         DynamicTokenDefinition definition,
-        RuntimeGameState state)
+        RuntimeGameState state,
+        IReadOnlyDictionary<string, Dictionary<string, string>>? modConfigByUniqueId)
     {
         if (definition.WhenConditions.Count == 0)
         {
@@ -871,7 +1203,7 @@ public sealed class StoryStateEvaluator
         string? reasonZh = null;
         foreach (var guard in definition.WhenConditions)
         {
-            var evaluated = this.EvaluatePatchWhenCondition(node, NormalizePatchWhenCondition(guard), state);
+            var evaluated = this.EvaluatePatchWhenCondition(node, NormalizePatchWhenCondition(guard), state, modConfigByUniqueId);
             if (!evaluated.IsKnown)
             {
                 hasUnknown = true;
@@ -915,6 +1247,7 @@ public sealed class StoryStateEvaluator
         StoryNode node,
         PatchWhenCondition condition,
         RuntimeGameState state,
+        IReadOnlyDictionary<string, Dictionary<string, string>>? modConfigByUniqueId,
         out PatchWhenCondition evaluated)
     {
         evaluated = condition;
@@ -930,7 +1263,7 @@ public sealed class StoryStateEvaluator
                 condition,
                 "Complex CP Query is not expanded.",
                 unknownKind: "complexQueryUnsupported",
-                reasonZh: "复杂 CP Query，暂未展开。");
+                reasonZh: "随机/概率条件暂不展开。");
             return true;
         }
 
@@ -940,7 +1273,7 @@ public sealed class StoryStateEvaluator
             var clauseResults = new List<PatchWhenCondition>();
             foreach (var clause in clauseGroup)
             {
-                clauseResults.Add(this.EvaluatePatchWhenCondition(node, clause, state));
+                clauseResults.Add(this.EvaluatePatchWhenCondition(node, clause, state, modConfigByUniqueId));
             }
 
             var groupPassed = clauseResults.All(result => result.IsKnown && result.Passed == true);
@@ -953,7 +1286,7 @@ public sealed class StoryStateEvaluator
                         condition,
                         "Query clause could not be fully evaluated.",
                         unknownKind: "complexQueryUnsupported",
-                        reasonZh: "复杂 CP Query，暂未展开。")
+                        reasonZh: "随机/概率条件暂不展开。")
                     : CreateEvaluatedPatchWhenCondition(
                         condition,
                         groupPassed,
@@ -993,7 +1326,7 @@ public sealed class StoryStateEvaluator
                 condition,
                 "Complex CP Query is not expanded.",
                 unknownKind: "complexQueryUnsupported",
-                reasonZh: "复杂 CP Query，暂未展开。");
+                reasonZh: "随机/概率条件暂不展开。");
             return true;
         }
 
@@ -1149,6 +1482,14 @@ public sealed class StoryStateEvaluator
             || condition.Value.Contains("{{", StringComparison.Ordinal)
             || key.Contains(">=", StringComparison.Ordinal)
             || key.Contains("<=", StringComparison.Ordinal);
+    }
+
+    private static bool LooksLikeComplexOrRandomPatchWhen(PatchWhenCondition condition)
+    {
+        return LooksLikeComplexQuery(condition)
+            || condition.Value.Contains(">=", StringComparison.Ordinal)
+            || condition.Value.Contains("<=", StringComparison.Ordinal)
+            || condition.Key.Contains("drinkchance", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool TryEvaluateFarmerCheaterCondition(
@@ -1459,7 +1800,7 @@ public sealed class StoryStateEvaluator
                 condition,
                 "Pregnant CP When requires runtime family state that is not exported.",
                 unknownKind: "runtimeMissing",
-                reasonZh: "运行时家庭状态未导出（Pregnant）。",
+                reasonZh: "无法判断：运行时家庭状态未导出（Pregnant）。",
                 parsedType: "cpFamilyState");
             return true;
         }
@@ -1470,7 +1811,7 @@ public sealed class StoryStateEvaluator
                 condition,
                 "HavingChild CP When requires runtime family state that is not exported.",
                 unknownKind: "runtimeMissing",
-                reasonZh: "运行时家庭状态未导出（HavingChild）。",
+                reasonZh: "无法判断：运行时家庭状态未导出（HavingChild）。",
                 parsedType: "cpFamilyState");
             return true;
         }

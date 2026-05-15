@@ -31,13 +31,16 @@ public sealed class RuntimeStateCollector
 
         var dayEventsSnapshot = CollectDayEvents(game1Type);
         var activeDialogueSnapshot = CollectActiveDialogueEvents(player);
+        var inUpgradedHouse = DetermineInUpgradedHouse(player, currentLocation);
+        var farmhouseSnapshot = CollectFarmhouseUpgrade(player, inUpgradedHouse);
+        var spouseBedSnapshot = CollectSpouseBed(relationships, inUpgradedHouse);
 
         return new RuntimeGameState
         {
             Year = GetStaticInt(game1Type, "year"),
             Season = season,
             DayOfMonth = dayOfMonth,
-            DayOfWeek = ComputeDayOfWeek(season, dayOfMonth),
+            DayOfWeek = ResolveDayOfWeek(game1Type, season, dayOfMonth),
             Time = GetStaticInt(game1Type, "timeOfDay"),
             Weather = DetermineWeather(game1Type),
             IsFestivalDay = DetermineIsFestivalDay(game1Type),
@@ -55,7 +58,11 @@ public sealed class RuntimeStateCollector
             Roommate = relationships.Roommate,
             DatingNpcNames = CollectDatingNpcNames(player),
             VisibleNpcNamesHere = CollectVisibleNpcNamesHere(currentLocation),
-            InUpgradedHouse = DetermineInUpgradedHouse(player, currentLocation),
+            InUpgradedHouse = inUpgradedHouse,
+            FarmhouseUpgradeKnown = farmhouseSnapshot.Known,
+            FarmhouseUpgradeLevel = farmhouseSnapshot.Level,
+            SpouseBedKnown = spouseBedSnapshot.Known,
+            HasSpouseBed = spouseBedSnapshot.HasBed,
             SeenEvents = CollectStringSet(player, "eventsSeen"),
             Mail = CollectStringSet(player, "mailReceived"),
             DialogueAnswers = CollectStringSet(
@@ -604,6 +611,89 @@ public sealed class RuntimeStateCollector
         }
 
         return null;
+    }
+
+    private static string ResolveDayOfWeek(Type game1Type, string season, int dayOfMonth)
+    {
+        var date = GetStaticMemberValue(game1Type, "Date");
+        if (date is not null)
+        {
+            var dow = GetMemberValue(date, "DayOfWeek");
+            if (dow is not null)
+            {
+                var name = Enum.GetName(dow.GetType(), dow) ?? ConvertToString(dow);
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    return name;
+                }
+            }
+        }
+
+        return ComputeDayOfWeek(season, dayOfMonth);
+    }
+
+    private sealed class FarmhouseSnapshot
+    {
+        public bool Known { get; init; }
+
+        public int? Level { get; init; }
+    }
+
+    private static FarmhouseSnapshot CollectFarmhouseUpgrade(object? player, bool? inUpgradedHouse)
+    {
+        foreach (var prop in new[] { "houseUpgradeLevel", "HouseUpgradeLevel", "farmHouseUpgradeLevel", "FarmHouseUpgradeLevel" })
+        {
+            var member = GetMemberValue(player, prop);
+            if (member is null)
+            {
+                continue;
+            }
+
+            var level = ExtractInt(member, "Value");
+            if (level.HasValue)
+            {
+                return new FarmhouseSnapshot { Known = true, Level = level.Value };
+            }
+        }
+
+        if (inUpgradedHouse == false)
+        {
+            return new FarmhouseSnapshot { Known = true, Level = 0 };
+        }
+
+        return new FarmhouseSnapshot { Known = false, Level = null };
+    }
+
+    private sealed class SpouseBedSnapshot
+    {
+        public bool Known { get; init; }
+
+        public bool? HasBed { get; init; }
+    }
+
+    private static SpouseBedSnapshot CollectSpouseBed(RelationshipState relationships, bool? inUpgradedHouse)
+    {
+        var hasSpouse = !string.IsNullOrWhiteSpace(relationships.SpouseName)
+            || !string.IsNullOrWhiteSpace(relationships.Spouse)
+            || !string.IsNullOrWhiteSpace(relationships.MarriedTo)
+            || relationships.Spouses is { Length: > 0 };
+
+        if (!hasSpouse)
+        {
+            return new SpouseBedSnapshot { Known = true, HasBed = false };
+        }
+
+        if (inUpgradedHouse == true)
+        {
+            return new SpouseBedSnapshot { Known = true, HasBed = true };
+        }
+
+        if (inUpgradedHouse == false)
+        {
+            return new SpouseBedSnapshot { Known = true, HasBed = false };
+        }
+
+        return new SpouseBedSnapshot { Known = false, HasBed = null };
     }
 
     private static (bool Known, List<string> Events) CollectDayEvents(Type game1Type)

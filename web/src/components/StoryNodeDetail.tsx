@@ -356,8 +356,11 @@ export function StoryNodeDetail({
                         : condition.unknownKind === "runtimeMissing"
                           ? "无法判断"
                           : condition.unknownKind === "complexQueryUnsupported"
-                            ? "复杂 Query"
-                            : "未解析"}
+                            || condition.unknownKind === "randomTokenUnsupported"
+                            ? "随机/概率"
+                            : condition.unknownKind === "externalTokenMissing"
+                              ? "外部 token"
+                              : "未解析"}
                     </span>
                   </div>
                   <p className="atom-result-card__reason">
@@ -366,8 +369,11 @@ export function StoryNodeDetail({
                       : condition.unknownKind === "runtimeMissing"
                         ? `无法判断：${condition.reasonZh ?? condition.reason ?? "运行时状态缺失"}`
                         : condition.unknownKind === "complexQueryUnsupported"
-                          ? "复杂 CP Query，暂未展开"
-                          : `未解析条件：${condition.key ?? "When"}`}
+                          || condition.unknownKind === "randomTokenUnsupported"
+                          ? (condition.reasonZh ?? "随机/概率条件暂不展开。")
+                          : condition.unknownKind === "externalTokenMissing"
+                            ? (condition.reasonZh ?? condition.reason ?? "外部条件未导出。")
+                            : `未解析条件：${condition.key ?? "When"}`}
                   </p>
                   <p className="atom-result-card__raw">
                     Raw value：{condition.value ?? condition.rawValue ?? "无原始值"}
@@ -386,7 +392,9 @@ export function StoryNodeDetail({
                     <span>{renderAtomValue(atom)}</span>
                   </div>
                   <p className="atom-result-card__reason">
-                    {atom.reason ?? "暂无说明。"}
+                    {atom.passed === null || atom.passed === undefined
+                      ? (atom.reasonZh ?? atom.reason ?? "暂无说明。")
+                      : (atom.reason ?? atom.reasonZh ?? "暂无说明。")}
                   </p>
                   <p className="atom-result-card__raw">{atom.raw ?? "无原始条件"}</p>
                 </li>

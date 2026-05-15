@@ -15,9 +15,11 @@ internal static class ConditionEvaluatorTests
         Evaluate_Spouse_TrueAndFalse();
         Evaluate_IsHost_DefaultsTrue();
         Evaluate_Friendship_TrueAndFalse();
+        Evaluate_Friendship_MinFriendshipPlaceholder_IsExternalTokenMissing();
         Evaluate_Dating_TrueAndFalse();
         Evaluate_NpcVisibleHere_TrueAndFalse();
         Evaluate_InUpgradedHouse_TrueAndFalse();
+        Evaluate_SpouseBed_BAlias_RuntimeStates();
         Evaluate_SawEvent_TrueAndFalse();
         Evaluate_Mail_TrueAndFalse();
         Evaluate_ChoseDialogueAnswers_TrueAndFalse();
@@ -26,6 +28,7 @@ internal static class ConditionEvaluatorTests
         Evaluate_Not();
         Evaluate_Unknown();
         Evaluate_DayOfWeekNegatedAbbreviations_OnSunday_IsUnsatisfied();
+        Evaluate_DayOfWeekNegatedMonThroughThu_OnSunday_Passes();
         Evaluate_NotGameStateQuerySeasonDay_OnSummer7_Passes();
         Evaluate_GameStateQuerySeasonDay_OnSummer28_Passes();
         Evaluate_GameStateQuerySeasonDay_OnSummer7_Fails();
@@ -158,6 +161,85 @@ internal static class ConditionEvaluatorTests
         AssertEqual(false, failed.Passed, "InUpgradedHouse false case mismatch.");
     }
 
+    private static void Evaluate_SpouseBed_BAlias_RuntimeStates()
+    {
+        var parser = new EventPreconditionParser();
+        var parsed = parser.Parse(new[] { "B" });
+        var evaluator = new ConditionEvaluator();
+
+        var unknownState = CreateBaseState();
+        unknownState = new RuntimeGameState
+        {
+            Year = unknownState.Year,
+            Season = unknownState.Season,
+            DayOfMonth = unknownState.DayOfMonth,
+            DayOfWeek = unknownState.DayOfWeek,
+            Time = unknownState.Time,
+            Weather = unknownState.Weather,
+            IsFestivalDay = unknownState.IsFestivalDay,
+            CurrentLocation = unknownState.CurrentLocation,
+            PlayerName = unknownState.PlayerName,
+            FriendshipPoints = unknownState.FriendshipPoints,
+            DatingNpcNames = unknownState.DatingNpcNames,
+            VisibleNpcNamesHere = unknownState.VisibleNpcNamesHere,
+            InUpgradedHouse = unknownState.InUpgradedHouse,
+            SpouseBedKnown = false,
+            HasSpouseBed = null,
+            SeenEvents = unknownState.SeenEvents,
+            Mail = unknownState.Mail,
+            DialogueAnswers = unknownState.DialogueAnswers
+        };
+
+        var unknownResult = evaluator.Evaluate(parsed.ConditionAst, unknownState);
+        AssertEqual(null, unknownResult.Passed, "SpouseBed without runtime certainty should be unknown.");
+        AssertEqual("SpouseBed", unknownResult.AtomResults[0].AtomType, "B should parse as SpouseBed atom.");
+        AssertEqual("runtimeMissing", unknownResult.AtomResults[0].UnknownKind, "SpouseBed unknown kind mismatch.");
+
+        var knownState = CreateBaseState(spouse: "Sam");
+        knownState = new RuntimeGameState
+        {
+            Year = knownState.Year,
+            Season = knownState.Season,
+            DayOfMonth = knownState.DayOfMonth,
+            DayOfWeek = knownState.DayOfWeek,
+            Time = knownState.Time,
+            Weather = knownState.Weather,
+            IsFestivalDay = knownState.IsFestivalDay,
+            CurrentLocation = knownState.CurrentLocation,
+            PlayerName = knownState.PlayerName,
+            SpouseName = knownState.SpouseName,
+            Spouse = knownState.Spouse,
+            FriendshipPoints = knownState.FriendshipPoints,
+            DatingNpcNames = knownState.DatingNpcNames,
+            VisibleNpcNamesHere = knownState.VisibleNpcNamesHere,
+            InUpgradedHouse = true,
+            SpouseBedKnown = true,
+            HasSpouseBed = true,
+            SeenEvents = knownState.SeenEvents,
+            Mail = knownState.Mail,
+            DialogueAnswers = knownState.DialogueAnswers
+        };
+
+        var passResult = evaluator.Evaluate(parsed.ConditionAst, knownState);
+        AssertEqual(true, passResult.Passed, "SpouseBed should pass when spouse and upgraded house are known.");
+        AssertEqual(false, passResult.HasUnknown, "SpouseBed with known snapshot should not be unknown.");
+    }
+
+    private static void Evaluate_Friendship_MinFriendshipPlaceholder_IsExternalTokenMissing()
+    {
+        var evaluator = new ConditionEvaluator();
+        var state = CreateBaseState();
+        var result = evaluator.Evaluate(
+            CreateAtom("Friendship", "f Alex {{MinFriendship}}", "Alex", "{{MinFriendship}}"),
+            state);
+
+        AssertEqual(null, result.Passed, "Unresolved MinFriendship token should be unknown.");
+        AssertEqual(true, result.HasUnknown, "MinFriendship should surface as unknown evaluation.");
+        AssertEqual("ExternalTokenMissing", result.AtomResults[0].AtomType, "MinFriendship should classify as ExternalTokenMissing.");
+        AssertEqual("externalTokenMissing", result.AtomResults[0].UnknownKind, "MinFriendship unknown kind mismatch.");
+        AssertContains(result.AtomResults[0].ReasonZh!, "MinFriendship", "MinFriendship reason should mention the token.");
+    }
+
     private static void Evaluate_SawEvent_TrueAndFalse()
     {
         var evaluator = new ConditionEvaluator();
@@ -287,6 +369,38 @@ internal static class ConditionEvaluatorTests
 
         AssertEqual(false, result.Passed, "Sunday is in the excluded list, so the negated day condition should fail.");
         AssertEqual(false, result.HasUnknown, "Abbreviated weekdays should be known, not unknown.");
+    }
+
+    private static void Evaluate_DayOfWeekNegatedMonThroughThu_OnSunday_Passes()
+    {
+        var parser = new EventPreconditionParser();
+        var parsed = parser.Parse(new[] { "d Mon Tue Wed Thu" });
+        var evaluator = new ConditionEvaluator();
+        var baseState = CreateBaseState();
+        var state = new RuntimeGameState
+        {
+            Year = baseState.Year,
+            Season = baseState.Season,
+            DayOfMonth = baseState.DayOfMonth,
+            DayOfWeek = "Sunday",
+            Time = baseState.Time,
+            Weather = baseState.Weather,
+            IsFestivalDay = baseState.IsFestivalDay,
+            CurrentLocation = baseState.CurrentLocation,
+            PlayerName = baseState.PlayerName,
+            FriendshipPoints = baseState.FriendshipPoints,
+            DatingNpcNames = baseState.DatingNpcNames,
+            VisibleNpcNamesHere = baseState.VisibleNpcNamesHere,
+            InUpgradedHouse = baseState.InUpgradedHouse,
+            SeenEvents = baseState.SeenEvents,
+            Mail = baseState.Mail,
+            DialogueAnswers = baseState.DialogueAnswers
+        };
+
+        var result = evaluator.Evaluate(parsed.ConditionAst, state);
+
+        AssertEqual(true, result.Passed, "Sunday is not Mon–Thu, so the negated weekday list should pass.");
+        AssertEqual(false, result.HasUnknown, "Weekday abbreviations should evaluate without unknown.");
     }
 
     private static void Evaluate_NotGameStateQuerySeasonDay_OnSummer7_Passes()

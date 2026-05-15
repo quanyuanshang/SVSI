@@ -13,4 +13,9 @@ public sealed class ConditionAtomResult
     public bool IsProgressionSensitive { get; init; }
 
     public string Reason { get; init; } = string.Empty;
+
+    /// <summary>Optional: externalTokenMissing | runtimeMissing for display-only Zh mapping.</summary>
+    public string? UnknownKind { get; init; }
+
+    public string? ReasonZh { get; init; }
 }

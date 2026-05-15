@@ -54,7 +54,11 @@ internal static class LiveStoryIndexRebuildCommand
                 JsonExportOptions.Default
             ) ?? new StoryStateEvaluationReport();
 
-            var rebuiltEvaluation = new StoryStateEvaluator().Evaluate(linkedStoryIndex.Nodes, currentEvaluation.RuntimeState);
+            var rebuiltEvaluation = new StoryStateEvaluator().Evaluate(
+                linkedStoryIndex.Nodes,
+                currentEvaluation.RuntimeState,
+                null,
+                linkedStoryIndex.ModConfigByUniqueId);
             File.WriteAllText(evaluatedStatePath, JsonSerializer.Serialize(rebuiltEvaluation, JsonExportOptions.Default));
 
             var targetNode = rebuiltEvaluation.Nodes.FirstOrDefault(

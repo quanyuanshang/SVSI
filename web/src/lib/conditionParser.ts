@@ -442,8 +442,23 @@ function parseFriendship(raw: string, args: string[], negated: boolean): ParsedC
   }
 
   const target = args[0];
-  const numeric = Number.parseInt(args[1], 10);
+  const thresholdRaw = args[1]?.trim() ?? "";
+  const numeric = Number.parseInt(thresholdRaw, 10);
   if (Number.isNaN(numeric)) {
+    if (/\{\{\s*MinFriendship\s*\}\}/i.test(thresholdRaw) || /MinFriendship/i.test(thresholdRaw)) {
+      return buildSimpleCondition(
+        raw,
+        "friendship",
+        negated,
+        negated
+          ? `${npcName(target)}好感度（动态阈值 MinFriendship）`
+          : `${npcName(target)}好感度至少（动态阈值 MinFriendship）`,
+        target,
+        thresholdRaw,
+        ">=",
+      );
+    }
+
     return unknownCondition(raw, `好感度阈值不是数字：${args[1]}`);
   }
 

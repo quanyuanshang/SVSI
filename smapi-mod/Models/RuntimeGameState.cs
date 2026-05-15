@@ -42,6 +42,14 @@ public sealed class RuntimeGameState
 
     public bool? InUpgradedHouse { get; init; }
 
+    public bool SpouseBedKnown { get; init; }
+
+    public bool? HasSpouseBed { get; init; }
+
+    public bool FarmhouseUpgradeKnown { get; init; }
+
+    public int? FarmhouseUpgradeLevel { get; init; }
+
     public HashSet<string> SeenEvents { get; init; } = new(StringComparer.Ordinal);
 
     public HashSet<string> Mail { get; init; } = new(StringComparer.Ordinal);

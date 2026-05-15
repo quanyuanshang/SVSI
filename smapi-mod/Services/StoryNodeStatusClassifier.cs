@@ -82,7 +82,15 @@ public sealed class StoryNodeStatusClassifier
 
             var unknownAtoms = conditionResult.AtomResults
                 .Where(atom => atom.Passed is null)
-                .Select(atom => string.IsNullOrWhiteSpace(atom.Raw) ? atom.AtomType : atom.Raw)
+                .Select(atom =>
+                {
+                    if (!string.IsNullOrWhiteSpace(atom.ReasonZh))
+                    {
+                        return atom.ReasonZh!;
+                    }
+
+                    return string.IsNullOrWhiteSpace(atom.Raw) ? atom.AtomType : atom.Raw;
+                })
                 .Distinct(StringComparer.Ordinal)
                 .ToList();
 
@@ -100,8 +108,7 @@ public sealed class StoryNodeStatusClassifier
                 node,
                 conditionResult,
                 StoryNodeStatus.Unknown,
-                $"{string.Join("; ", unknownParts)} Cannot safely determine status."
-            );
+                $"{string.Join("; ", unknownParts)}。无法据此判断可触发状态。");
         }
 
         if (progressionFailures.Count > 0)
@@ -228,19 +235,14 @@ public sealed class StoryNodeStatusClassifier
             parts.Add($"运行时状态缺失：{string.Join("; ", runtimeMissing.Select(FormatPatchWhenReasonZh))}");
         }
 
-        if (complexQuery.Count > 0)
+        if (complexQuery.Count > 0 || randomToken.Count > 0)
         {
-            parts.Add("复杂 CP Query 暂未展开");
+            parts.Add("随机/概率条件暂不展开");
         }
 
         if (externalToken.Count > 0)
         {
             parts.Add($"外部 token 未导出：{string.Join("; ", externalToken.Select(FormatPatchWhenReasonZh))}");
-        }
-
-        if (randomToken.Count > 0)
-        {
-            parts.Add("随机/概率条件暂不展开");
         }
 
         if (parseUnknown.Count > 0)
@@ -253,7 +255,7 @@ public sealed class StoryNodeStatusClassifier
             parts.Add($"Patch-level When conditions are not evaluated: {string.Join("; ", unknownPatchWhenConditions.Select(FormatPatchWhenCondition))}");
         }
 
-        return $"{string.Join("; ", parts)}. Cannot safely determine status.";
+        return $"{string.Join("; ", parts)}。无法据此判断可触发状态。";
     }
 
     private static string FormatPatchWhenCondition(PatchWhenCondition condition)

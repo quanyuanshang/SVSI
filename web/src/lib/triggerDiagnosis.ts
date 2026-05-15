@@ -18,6 +18,7 @@ export interface CurrentGameState {
   year?: number;
   season?: string;
   day?: number;
+  dayOfWeek?: string;
   time?: number;
   location?: string;
   weather?: string;
@@ -32,6 +33,8 @@ export interface CurrentGameState {
   roommate?: string | string[] | null;
   visibleNpcNamesHere?: string[];
   inUpgradedHouse?: boolean | null;
+  spouseBedKnown?: boolean;
+  hasSpouseBed?: boolean | null;
   seenEvents?: string[];
   mailFlags?: string[];
   conversationTopics?: string[];
@@ -219,6 +222,91 @@ function unknownEvaluation(condition: ParsedCondition, reasonZh?: string): AtomE
   };
 }
 
+function normalizeDayOfWeekToken(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return trimmed;
+  }
+
+  const upperMap: Record<string, string> = {
+    MON: "Monday",
+    TUE: "Tuesday",
+    WED: "Wednesday",
+    THU: "Thursday",
+    FRI: "Friday",
+    SAT: "Saturday",
+    SUN: "Sunday",
+    MONDAY: "Monday",
+    TUESDAY: "Tuesday",
+    WEDNESDAY: "Wednesday",
+    THURSDAY: "Thursday",
+    FRIDAY: "Friday",
+    SATURDAY: "Saturday",
+    SUNDAY: "Sunday",
+  };
+
+  const key = trimmed.toUpperCase();
+  if (upperMap[key]) {
+    return upperMap[key];
+  }
+
+  return trimmed[0].toUpperCase() + trimmed.slice(1).toLowerCase();
+}
+
+function evaluateDayOfWeek(condition: ParsedCondition, state: CurrentGameState): AtomEvaluation {
+  const argList = Array.isArray(condition.value)
+    ? condition.value.map((item) => String(item))
+    : [];
+  if (argList.length === 0) {
+    return unknownEvaluation(condition, "缺少星期参数。");
+  }
+
+  if (!state.dayOfWeek?.trim()) {
+    return unknownEvaluation(condition, "运行时未提供当前星期。");
+  }
+
+  const current = normalizeDayOfWeekToken(state.dayOfWeek);
+  const candidates = argList.map(normalizeDayOfWeekToken);
+  const inList = candidates.some((candidate) => candidate === current);
+
+  if (condition.negated) {
+    const matches = !inList;
+    return {
+      outcome: matches ? "satisfied" : "unsatisfied",
+      reasonZh: matches
+        ? `星期条件满足：今天（${current}）不在排除列表 [${candidates.join("、")}]。`
+        : `星期条件不满足：今天（${current}）在排除列表 [${candidates.join("、")}] 中。`,
+    };
+  }
+
+  const matches = inList;
+  return {
+    outcome: matches ? "satisfied" : "unsatisfied",
+    reasonZh: matches
+      ? `星期条件满足：今天（${current}）在要求的 [${candidates.join("、")}] 中。`
+      : `星期条件不满足：今天（${current}）不在要求的 [${candidates.join("、")}] 中。`,
+  };
+}
+
+function evaluateSpouseBed(condition: ParsedCondition, state: CurrentGameState): AtomEvaluation {
+  if (state.spouseBedKnown !== true) {
+    return unknownEvaluation(condition, "当前暂无法判断家中是否有可用配偶床位。");
+  }
+
+  const has = state.hasSpouseBed === true;
+  const matches = condition.negated ? !has : has;
+  return {
+    outcome: matches ? "satisfied" : "unsatisfied",
+    reasonZh: matches
+      ? condition.negated
+        ? "配偶床位条件满足：当前没有可用的配偶床位（或等价判定）。"
+        : "配偶床位条件满足：家中有可用的配偶床位。"
+      : condition.negated
+        ? "配偶床位条件不满足：仍检测到有配偶床位可用。"
+        : "配偶床位条件不满足：家中没有可用的配偶床位。",
+  };
+}
+
 function evaluateAtom(
   condition: ParsedCondition,
   state: CurrentGameState,
@@ -272,12 +360,13 @@ function evaluateAtom(
     case "npcVisible":
       return unknownEvaluation(condition, `当前暂无法判断：${npcZh(condition.target)}当前可见。`);
     case "spouseBed":
-      return unknownEvaluation(condition, "当前暂无法判断：家中是否有可用的配偶床位。");
+      return evaluateSpouseBed(condition, state);
+    case "dayOfWeek":
+      return evaluateDayOfWeek(condition, state);
     case "hostMail":
     case "notHostMail":
     case "hostOrLocalMail":
     case "notHostOrLocalMail":
-    case "dayOfWeek":
     case "isHost":
     case "gender":
     case "daysPlayed":
@@ -303,6 +392,7 @@ function evaluateAtom(
     case "notUpcomingFestival":
     case "dialogueAnswer":
     case "unknown":
+      return unknownEvaluation(condition, condition.unknownReason);
     default:
       return unknownEvaluation(condition);
   }
@@ -369,6 +459,13 @@ function evaluateFriendship(condition: ParsedCondition, state: CurrentGameState)
 
   const threshold = asNumber(condition.value);
   if (threshold === null) {
+    const rawThreshold = typeof condition.value === "string" ? condition.value : "";
+    if (/MinFriendship/i.test(rawThreshold)) {
+      return unknownEvaluation(
+        condition,
+        "外部/动态 token MinFriendship 未导出，无法判断好感度阈值。",
+      );
+    }
     return unknownEvaluation(condition, "好感度阈值无效。");
   }
 
@@ -1147,8 +1244,25 @@ export function diagnoseEventTrigger(
         status: "unknown",
         type: "unknown",
         negated: false,
-        descriptionZh: "复杂 CP Query",
-        reasonZh: patch.reasonZh ?? "复杂 CP Query，暂未展开",
+        descriptionZh: "随机/概率 CP Query",
+        reasonZh: patch.reasonZh ?? "随机/概率条件暂不展开。",
+        reasonRaw: patch.reason,
+        actualZh: patch.value ?? patch.rawValue ?? "无原始值",
+      });
+      continue;
+    }
+
+    if (
+      patch.unknownKind === "externalTokenMissing"
+      || patch.unknownKind === "randomTokenUnsupported"
+    ) {
+      unknown.push({
+        conditionRaw: patchRaw,
+        status: "unknown",
+        type: "unknown",
+        negated: false,
+        descriptionZh: formatPatchWhenDescriptionZh(patch.key, patch.value),
+        reasonZh: patch.reasonZh ?? patch.reason ?? "外部或随机条件暂无法评估。",
         reasonRaw: patch.reason,
         actualZh: patch.value ?? patch.rawValue ?? "无原始值",
       });
@@ -1184,6 +1298,7 @@ export function buildGameStateFromRuntime(runtime?: RuntimeGameState | null): Cu
     year: runtime.year,
     season: runtime.season,
     day: runtime.dayOfMonth,
+    dayOfWeek: runtime.dayOfWeek,
     time: runtime.time,
     location: runtime.currentLocation,
     weather: runtime.weather,
@@ -1195,6 +1310,8 @@ export function buildGameStateFromRuntime(runtime?: RuntimeGameState | null): Cu
     conversationTopics: runtime.dialogueAnswers ?? [],
     visibleNpcNamesHere: runtime.visibleNpcNamesHere ?? undefined,
     inUpgradedHouse: runtime.inUpgradedHouse,
+    spouseBedKnown: runtime.spouseBedKnown,
+    hasSpouseBed: runtime.hasSpouseBed,
   };
 
   // Only populate relationship fields when the runtime actually supplied them.

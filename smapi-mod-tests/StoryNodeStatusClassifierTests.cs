@@ -120,7 +120,7 @@ internal static class StoryNodeStatusClassifierTests
         var evaluation = classifier.Classify(node, state, conditionResult);
 
         AssertEqual(StoryNodeStatus.Unknown, evaluation.Status, "Unknown-only case should be Unknown.");
-        AssertContains(evaluation.StatusReason, "Cannot safely determine status", "Unknown reason mismatch.");
+        AssertContains(evaluation.StatusReason, "无法据此判断可触发状态", "Unknown reason mismatch.");
     }
 
     private static void Classify_UnknownAndFriendshipFailed_ReturnsLocked()

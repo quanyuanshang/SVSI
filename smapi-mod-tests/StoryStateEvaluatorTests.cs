@@ -33,7 +33,13 @@ internal static class StoryStateEvaluatorTests
         Evaluate_DynamicTokenSebbySprite_Yes_WithQueryGuard();
         Evaluate_ActiveDialogueEvent_Alias_NotUnsupported();
         Evaluate_Pregnant_When_IsRuntimeMissingNotParseUnknown();
+        Evaluate_Pregnant_When_StatusReason_ZhHasFamilyStatePhrase();
         Evaluate_NonNumericBranchTargets_AreNotUnknown();
+        Evaluate_DayEventContains_Festivals_KnownEmpty_ExpectedFalse_Passes();
+        Evaluate_FarmhouseUpgrade_Contains_WhenUnknown_IsRuntimeMissing();
+        Evaluate_FarmhouseUpgrade_Exact_WhenKnown_Passes();
+        Evaluate_CmctConfig_ReadsTargetModConfig();
+        Evaluate_YearsMarried_CustomToken_IsExternalMissingNotParseUnknown();
     }
 
     private static void Evaluate_NonNumericEventIdWithoutPreconditions_IsUnknownNotCurrent()
@@ -668,6 +674,150 @@ internal static class StoryStateEvaluatorTests
         AssertEqual("cpFamilyState", patch.ParsedType, "Pregnant parsed type mismatch.");
     }
 
+    private static void Evaluate_Pregnant_When_StatusReason_ZhHasFamilyStatePhrase()
+    {
+        var node = CreateNode("400013", "Tests.Family", "Family Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition { Key = "Pregnant", Value = "true" });
+
+        var evaluation = new StoryStateEvaluator().Evaluate(new[] { node }, CreateBaseState()).Nodes.Single();
+        AssertEqual(StoryNodeStatus.Unknown, evaluation.Status, "Unknown CP When should surface as Unknown.");
+        AssertTrue(
+            evaluation.StatusReason.Contains("Pregnant", StringComparison.Ordinal)
+                && !evaluation.StatusReason.Contains("Cannot safely determine status", StringComparison.OrdinalIgnoreCase),
+            "Pregnant unknown reason should use Chinese family-state phrasing without raw English fallback.");
+    }
+
+    private static void Evaluate_DayEventContains_Festivals_KnownEmpty_ExpectedFalse_Passes()
+    {
+        var node = CreateNode("400014", "Tests.DayEvent2", "DayEvent2 Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition
+        {
+            Key = "DayEvent |contains=dance of the moonlight jellies, egg festival",
+            Value = "false"
+        });
+
+        var state = CreateBaseState(dayEventsKnown: true, dayEvents: Array.Empty<string>());
+        var patch = new StoryStateEvaluator().Evaluate(new[] { node }, state).Nodes.Single().PatchWhenConditions.Single();
+        AssertTrue(patch.IsKnown, "DayEvent |contains should evaluate when DayEventsKnown.");
+        AssertEqual(true, patch.Passed, "Empty DayEvents with contains expected false should pass.");
+    }
+
+    private static void Evaluate_FarmhouseUpgrade_Contains_WhenUnknown_IsRuntimeMissing()
+    {
+        var node = CreateNode("400015", "Tests.Farm", "Farm Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition
+        {
+            Key = "FarmhouseUpgrade |contains=0, 1",
+            Value = "true"
+        });
+
+        var state = CreateBaseState();
+        state = new RuntimeGameState
+        {
+            Year = state.Year,
+            Season = state.Season,
+            DayOfMonth = state.DayOfMonth,
+            DayOfWeek = state.DayOfWeek,
+            Time = state.Time,
+            Weather = state.Weather,
+            IsFestivalDay = state.IsFestivalDay,
+            CurrentLocation = state.CurrentLocation,
+            PlayerName = state.PlayerName,
+            InstalledModIds = state.InstalledModIds,
+            FriendshipPoints = state.FriendshipPoints,
+            DatingNpcNames = state.DatingNpcNames,
+            VisibleNpcNamesHere = state.VisibleNpcNamesHere,
+            InUpgradedHouse = true,
+            FarmhouseUpgradeKnown = false,
+            FarmhouseUpgradeLevel = null,
+            SeenEvents = state.SeenEvents,
+            Mail = state.Mail,
+            DialogueAnswers = state.DialogueAnswers,
+            DayEventsKnown = state.DayEventsKnown,
+            DayEvents = state.DayEvents
+        };
+
+        var patch = new StoryStateEvaluator().Evaluate(new[] { node }, state).Nodes.Single().PatchWhenConditions.Single();
+        AssertEqual(false, patch.IsKnown, "Unknown farmhouse level must not fake a pass/fail.");
+        AssertEqual("runtimeMissing", patch.UnknownKind, "FarmhouseUpgrade unknown kind mismatch.");
+        AssertEqual("cpFarmhouseUpgrade", patch.ParsedType, "FarmhouseUpgrade parsed type mismatch.");
+    }
+
+    private static void Evaluate_FarmhouseUpgrade_Exact_WhenKnown_Passes()
+    {
+        var node = CreateNode("400016", "Tests.Farm", "Farm Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition { Key = "FarmhouseUpgrade", Value = "1" });
+
+        var state = CreateBaseState();
+        state = new RuntimeGameState
+        {
+            Year = state.Year,
+            Season = state.Season,
+            DayOfMonth = state.DayOfMonth,
+            DayOfWeek = state.DayOfWeek,
+            Time = state.Time,
+            Weather = state.Weather,
+            IsFestivalDay = state.IsFestivalDay,
+            CurrentLocation = state.CurrentLocation,
+            PlayerName = state.PlayerName,
+            InstalledModIds = state.InstalledModIds,
+            FriendshipPoints = state.FriendshipPoints,
+            DatingNpcNames = state.DatingNpcNames,
+            VisibleNpcNamesHere = state.VisibleNpcNamesHere,
+            InUpgradedHouse = state.InUpgradedHouse,
+            FarmhouseUpgradeKnown = true,
+            FarmhouseUpgradeLevel = 1,
+            SeenEvents = state.SeenEvents,
+            Mail = state.Mail,
+            DialogueAnswers = state.DialogueAnswers,
+            DayEventsKnown = state.DayEventsKnown,
+            DayEvents = state.DayEvents
+        };
+
+        var patch = new StoryStateEvaluator().Evaluate(new[] { node }, state).Nodes.Single().PatchWhenConditions.Single();
+        AssertTrue(patch.IsKnown, "FarmhouseUpgrade should evaluate when known.");
+        AssertEqual(true, patch.Passed, "FarmhouseUpgrade level 1 should match.");
+    }
+
+    private static void Evaluate_CmctConfig_ReadsTargetModConfig()
+    {
+        var node = CreateNode("400017", "Tests.Cmct", "CMCT Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition
+        {
+            Key = "Spiderbuttons.CMCT/Config: maggplays.immersivesam,SamCustomSprites |contains=yes",
+            Value = "true"
+        });
+
+        var modConfigs = new Dictionary<string, Dictionary<string, string>>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["maggplays.immersivesam"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["SamCustomSprites"] = "yes"
+            }
+        };
+
+        var patch = new StoryStateEvaluator().Evaluate(new[] { node }, CreateBaseState(), null, modConfigs).Nodes.Single()
+            .PatchWhenConditions.Single();
+        AssertTrue(patch.IsKnown, "CMCT config should resolve from target mod id.");
+        AssertEqual(true, patch.Passed, "CMCT contains=yes should pass when config value matches.");
+    }
+
+    private static void Evaluate_YearsMarried_CustomToken_IsExternalMissingNotParseUnknown()
+    {
+        var node = CreateNode("400018", "Tests.Years", "Years Pack", "Town", new ConditionAstNode { Type = "AllOf" });
+        node.PatchWhenConditions.Add(new PatchWhenCondition
+        {
+            Key = "TheMightyAmondee.CustomTokens/YearsMarried |contains=0",
+            Value = "true"
+        });
+
+        var patch = new StoryStateEvaluator().Evaluate(new[] { node }, CreateBaseState()).Nodes.Single().PatchWhenConditions.Single();
+        AssertEqual(false, patch.IsKnown, "YearsMarried CustomTokens should stay unknown conservatively.");
+        AssertEqual("externalTokenMissing", patch.UnknownKind, "YearsMarried kind mismatch.");
+        AssertEqual("externalCustomToken", patch.ParsedType, "YearsMarried parsed type mismatch.");
+        AssertContains(patch.ReasonZh, "年限未导出", "YearsMarried reasonZh mismatch.");
+    }
+
     private static void Evaluate_NonNumericBranchTargets_AreNotUnknown()
     {
         foreach (var (eventId, kind, status) in new[]
@@ -699,7 +849,7 @@ internal static class StoryStateEvaluatorTests
 
         AssertEqual(false, patch.IsKnown, "Unsupported complex query must remain unknown.");
         AssertEqual("complexQueryUnsupported", patch.UnknownKind, "Complex query unknown kind mismatch.");
-        AssertContains(patch.ReasonZh, "复杂 CP Query", "Complex query reason mismatch.");
+        AssertContains(patch.ReasonZh, "随机/概率条件暂不展开", "Complex query reason mismatch.");
     }
 
     private static StoryNode CreateNode(

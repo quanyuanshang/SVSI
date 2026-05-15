@@ -36,6 +36,10 @@ export interface RuntimeGameState {
   datingNpcNames?: string[];
   visibleNpcNamesHere?: string[];
   inUpgradedHouse?: boolean | null;
+  spouseBedKnown?: boolean;
+  hasSpouseBed?: boolean | null;
+  farmhouseUpgradeKnown?: boolean;
+  farmhouseUpgradeLevel?: number | null;
   seenEvents: string[];
   mail: string[];
   dialogueAnswers: string[];
@@ -100,6 +104,8 @@ export interface ConditionAtomResult {
   isContextSensitive?: boolean;
   isProgressionSensitive?: boolean;
   reason?: string;
+  unknownKind?: string;
+  reasonZh?: string;
 }
 
 export interface PatchWhenCondition {

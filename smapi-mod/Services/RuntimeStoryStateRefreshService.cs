@@ -96,8 +96,8 @@ public sealed class RuntimeStoryStateRefreshService
 
         try
         {
-            var storyNodes = this.storyStateEvaluationExporter.LoadStoryNodesFromFile(storyIndexPath);
-            var report = this.storyStateEvaluator.Evaluate(storyNodes, runtimeState, this.translationCatalog);
+            var index = this.storyStateEvaluationExporter.LoadStoryRawEventIndex(storyIndexPath);
+            var report = this.storyStateEvaluator.Evaluate(index.Nodes, runtimeState, this.translationCatalog, index.ModConfigByUniqueId);
 
             EnsureParentDirectory(evaluatedOutputPath);
             EnsureParentDirectory(exportStatePath);
@@ -111,7 +111,7 @@ public sealed class RuntimeStoryStateRefreshService
                 System.Text.Json.JsonSerializer.Serialize(ToExportState(runtimeState), JsonExportOptions.Default)
             );
 
-            this.TryWriteEventHistory(evaluatedOutputPath, runtimeState, storyNodes);
+            this.TryWriteEventHistory(evaluatedOutputPath, runtimeState, index.Nodes);
 
             this.logInfo?.Invoke(
                 $"Story state refreshed: Current={GetStatusCount(report, StoryNodeStatus.Current)}, " +

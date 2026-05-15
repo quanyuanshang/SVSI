@@ -15,7 +15,8 @@ public sealed class ConditionEvaluator
         "FestivalDay",
         "Location",
         "NpcVisibleHere",
-        "InUpgradedHouse"
+        "InUpgradedHouse",
+        "SpouseBed"
     };
 
     private static readonly HashSet<string> ProgressionSensitiveAtomTypes = new(StringComparer.Ordinal)
@@ -30,7 +31,8 @@ public sealed class ConditionEvaluator
         "HostOrLocalMail",
         "ChoseDialogueAnswers",
         "ActiveDialogueEvent",
-        "Spouse"
+        "Spouse",
+        "ExternalTokenMissing"
     };
 
     public ConditionEvaluationResult Evaluate(ConditionAstNode ast, RuntimeGameState state)
@@ -189,6 +191,8 @@ public sealed class ConditionEvaluator
             "Relationship" => this.EvaluateRelationshipAtom(raw, node.Values, state),
             "NpcVisibleHere" => this.EvaluateNpcVisibleHereAtom(raw, node.Values, state),
             "InUpgradedHouse" => this.EvaluateInUpgradedHouseAtom(raw, state),
+            "SpouseBed" => this.EvaluateSpouseBedAtom(raw, state),
+            "ExternalTokenMissing" => this.EvaluateExternalTokenMissingAtom(raw, node.Values),
             "SawEvent" => this.EvaluateSawEventAtom(raw, node.Values, state),
             "LocalMail" or "HostMail" or "HostOrLocalMail" => this.EvaluateMailAtom(raw, atomType, node.Values, state),
             "ChoseDialogueAnswers" => this.EvaluateDialogueAnswerAtom(raw, node.Values, state),
@@ -436,6 +440,13 @@ public sealed class ConditionEvaluator
             var npcName = values[index];
             if (!int.TryParse(values[index + 1], out var requiredPoints))
             {
+                var pts = values[index + 1].Trim();
+                if (pts.StartsWith("{{", StringComparison.Ordinal) && pts.EndsWith("}}", StringComparison.Ordinal))
+                {
+                    var inner = pts.Substring(2, pts.Length - 4).Trim();
+                    return this.EvaluateExternalTokenMissingAtom(raw, new List<string> { npcName, inner });
+                }
+
                 return this.CreateUnknownAtomResult(raw, "Friendship", $"Friendship condition has invalid points value: {values[index + 1]}");
             }
 
@@ -588,6 +599,53 @@ public sealed class ConditionEvaluator
         );
     }
 
+    private ConditionAtomResult EvaluateSpouseBedAtom(string raw, RuntimeGameState state)
+    {
+        if (!state.SpouseBedKnown)
+        {
+            return new ConditionAtomResult
+            {
+                Raw = raw,
+                AtomType = "SpouseBed",
+                Passed = null,
+                UnknownKind = "runtimeMissing",
+                ReasonZh = "当前暂无法判断家中是否有可用配偶床位。",
+                Reason = "SpouseBed runtime state is unavailable.",
+                IsContextSensitive = true,
+                IsProgressionSensitive = true
+            };
+        }
+
+        var has = state.HasSpouseBed == true;
+        return this.CreateAtomResult(
+            raw,
+            "SpouseBed",
+            has,
+            has
+                ? "SpouseBed matched: spouse present with upgraded farmhouse (conservative)."
+                : "SpouseBed failed: requires spouse with upgraded farmhouse (conservative).");
+    }
+
+    private ConditionAtomResult EvaluateExternalTokenMissingAtom(string raw, IReadOnlyList<string> values)
+    {
+        var token = values.Count >= 2 ? values[1] : values.Count >= 1 ? values[0] : "?";
+        var reasonZh = string.Equals(token, "MinFriendship", StringComparison.OrdinalIgnoreCase)
+            ? "外部/动态 token MinFriendship 未导出，无法判断好感度阈值。"
+            : $"外部/动态 token {token} 未导出，无法判断条件。";
+
+        return new ConditionAtomResult
+        {
+            Raw = raw,
+            AtomType = "ExternalTokenMissing",
+            Passed = null,
+            UnknownKind = "externalTokenMissing",
+            ReasonZh = reasonZh,
+            Reason = $"External token '{token}' could not be resolved.",
+            IsContextSensitive = false,
+            IsProgressionSensitive = true
+        };
+    }
+
     private ConditionAtomResult EvaluateSawEventAtom(string raw, IReadOnlyList<string> values, RuntimeGameState state)
     {
         if (values.Count == 0)
@@ -688,7 +746,12 @@ public sealed class ConditionEvaluator
         };
     }
 
-    private ConditionAtomResult CreateUnknownAtomResult(string raw, string atomType, string reason)
+    private ConditionAtomResult CreateUnknownAtomResult(
+        string raw,
+        string atomType,
+        string reason,
+        string? unknownKind = null,
+        string? reasonZh = null)
     {
         return new ConditionAtomResult
         {
@@ -697,7 +760,9 @@ public sealed class ConditionEvaluator
             Passed = null,
             IsContextSensitive = ContextSensitiveAtomTypes.Contains(atomType),
             IsProgressionSensitive = ProgressionSensitiveAtomTypes.Contains(atomType),
-            Reason = reason
+            Reason = reason,
+            UnknownKind = unknownKind,
+            ReasonZh = string.IsNullOrWhiteSpace(reasonZh) ? reason : reasonZh
         };
     }
 }
