@@ -203,4 +203,6 @@ export interface StoryFilterOptions {
   // a single de-dup'd entry per Chinese display name.
   locationEquivalents?: ReadonlyMap<string, ReadonlySet<string>>;
   npcEquivalents?: ReadonlyMap<string, ReadonlySet<string>>;
+  /** Best-effort mod id for portrait resolution in the filter sidebar. */
+  npcPortraitModIds?: ReadonlyMap<string, string>;
 }

@@ -142,36 +142,258 @@ function syncPortraitureSources(manifest) {
   return copied;
 }
 
-function syncContentPatcherPortraits(manifest) {
-  const copied = [];
+function isBasePortraitFromFile(characterName, fromFile) {
+  const normalized = fromFile.replace(/\\/g, "/");
+  return (
+    normalized.endsWith(`/${characterName}.png`) ||
+    normalized.endsWith(`/Portraits/${characterName}/${characterName}.png`)
+  );
+}
+
+/** Regex fallback for JSONC content packs (e.g. SVE NPC files with comments / trailing commas). */
+function extractPortraitLoadsFromText(text) {
+  const stripped = stripJsonComments(text);
+  const loads = new Map();
+  const pattern =
+    /"Action"\s*:\s*"Load"[\s\S]*?"Target"\s*:\s*"Portraits\/([^"/{}*]+)"[\s\S]*?"FromFile"\s*:\s*"([^"]+\.png)"/gi;
+
+  for (let match = pattern.exec(stripped); match; match = pattern.exec(stripped)) {
+    const [, characterName, fromFile] = match;
+    if (fromFile.includes("{{")) {
+      continue;
+    }
+
+    const existing = loads.get(characterName);
+    if (!existing || isBasePortraitFromFile(characterName, fromFile)) {
+      loads.set(characterName, fromFile);
+    }
+  }
+
+  return loads;
+}
+
+function registerContentPatcherPortrait(manifest, modId, modKey, characterName, source, copiedKeys, copied) {
+  const key = `${modId}/${characterName}`;
+  if (copiedKeys.has(key)) {
+    return false;
+  }
+
+  if (!existsSync(source) || !source.toLowerCase().endsWith(".png")) {
+    return false;
+  }
+
+  const output = join(cpOutRoot, modKey, `${safeSegment(characterName)}.png`);
+  const url = copyPortrait(source, output);
+  manifest.portraitSources[`${modId}/${characterName}`] = url;
+  manifest.portraitSources[`${modKey}/${safeSegment(characterName)}`] = url;
+  copiedKeys.add(key);
+  copied.push(key);
+  return true;
+}
+
+function syncContentPatcherPortraits(manifest, copiedKeys, copied) {
   for (const contentPath of collectJsonFiles(modsDir)) {
-    const content = readJson(contentPath);
-    const changes = Array.isArray(content?.Changes) ? content.Changes : [];
-    if (changes.length === 0) continue;
+    let rawText;
+    try {
+      rawText = readFileSync(contentPath, "utf-8");
+    } catch {
+      continue;
+    }
 
     const modDir = findContentPackRoot(contentPath);
     const modManifest = readJson(join(modDir, "manifest.json"));
     const modId = modManifest?.UniqueID ?? modManifest?.Name ?? relative(modsDir, modDir);
     const modKey = safeSegment(modId);
+    const portraitLoads = new Map();
 
-    for (const change of changes) {
-      const target = String(change.Target ?? "");
-      const match = /^Portraits\/([^/{}]+)$/i.exec(target);
-      if (!match || !change.FromFile) continue;
+    const content = readJson(contentPath);
+    if (Array.isArray(content?.Changes)) {
+      for (const change of content.Changes) {
+        const target = String(change.Target ?? "");
+        const match = /^Portraits\/([^/{}]+)$/i.exec(target);
+        if (!match || !change.FromFile) {
+          continue;
+        }
 
-      const characterName = match[1];
-      const source = resolve(modDir, String(change.FromFile));
-      if (!existsSync(source) || !source.toLowerCase().endsWith(".png")) continue;
+        const fromFile = String(change.FromFile);
+        if (fromFile.includes("{{")) {
+          continue;
+        }
 
-      const output = join(cpOutRoot, modKey, `${safeSegment(characterName)}.png`);
-      const url = copyPortrait(source, output);
-      manifest.portraitSources[`${modId}/${characterName}`] = url;
-      manifest.portraitSources[`${modKey}/${safeSegment(characterName)}`] = url;
-      copied.push(`${modId}/${characterName}`);
+        portraitLoads.set(match[1], fromFile);
+      }
+    }
+
+    for (const [characterName, fromFile] of extractPortraitLoadsFromText(rawText)) {
+      const existing = portraitLoads.get(characterName);
+      if (!existing || isBasePortraitFromFile(characterName, fromFile)) {
+        portraitLoads.set(characterName, fromFile);
+      }
+    }
+
+    for (const [characterName, fromFile] of portraitLoads) {
+      registerContentPatcherPortrait(
+        manifest,
+        modId,
+        modKey,
+        characterName,
+        resolve(modDir, fromFile),
+        copiedKeys,
+        copied,
+      );
     }
   }
 
-  return copied;
+}
+
+function findCharacterPortraitsRoot(modRoot) {
+  const direct = join(modRoot, "assets", "CharacterFiles", "Portraits");
+  if (existsSync(direct)) {
+    return { portraitsRoot: direct, packRoot: modRoot };
+  }
+
+  if (!existsSync(modRoot)) {
+    return null;
+  }
+
+  for (const entry of readdirSync(modRoot)) {
+    const nestedRoot = join(modRoot, entry);
+    if (!statSync(nestedRoot).isDirectory()) {
+      continue;
+    }
+
+    const nested = join(nestedRoot, "assets", "CharacterFiles", "Portraits");
+    if (existsSync(nested)) {
+      return { portraitsRoot: nested, packRoot: nestedRoot };
+    }
+  }
+
+  return null;
+}
+
+function syncCharacterPortraitAssetDirs(manifest, copiedKeys, copied) {
+  if (!existsSync(modsDir)) {
+    return 0;
+  }
+
+  let added = 0;
+  for (const entry of readdirSync(modsDir)) {
+    const modRoot = join(modsDir, entry);
+    if (!statSync(modRoot).isDirectory()) {
+      continue;
+    }
+
+    const located = findCharacterPortraitsRoot(modRoot);
+    if (!located) {
+      continue;
+    }
+
+    const { portraitsRoot, packRoot } = located;
+    const modManifest = readJson(join(packRoot, "manifest.json"));
+    const modId = modManifest?.UniqueID ?? modManifest?.Name ?? relative(modsDir, packRoot);
+    const modKey = safeSegment(modId);
+
+    for (const characterName of readdirSync(portraitsRoot)) {
+      const characterDir = join(portraitsRoot, characterName);
+      if (!statSync(characterDir).isDirectory()) {
+        continue;
+      }
+
+      const source = join(characterDir, `${characterName}.png`);
+      if (
+        registerContentPatcherPortrait(
+          manifest,
+          modId,
+          modKey,
+          characterName,
+          source,
+          copiedKeys,
+          copied,
+        )
+      ) {
+        added += 1;
+      }
+    }
+  }
+
+  return added;
+}
+
+function indexOrphanPortraitFiles(manifest) {
+  if (!existsSync(cpOutRoot)) {
+    return 0;
+  }
+
+  let indexed = 0;
+  for (const modKey of readdirSync(cpOutRoot)) {
+    const modDir = join(cpOutRoot, modKey);
+    if (!statSync(modDir).isDirectory()) {
+      continue;
+    }
+
+    for (const fileName of readdirSync(modDir)) {
+      if (!fileName.toLowerCase().endsWith(".png")) {
+        continue;
+      }
+
+      const characterName = fileName.replace(/\.png$/i, "");
+      const key = `${modKey}/${characterName}`;
+      if (manifest.portraitSources[key]) {
+        continue;
+      }
+
+      manifest.portraitSources[key] = toPublicUrl(webPublic, join(modDir, fileName));
+      indexed += 1;
+    }
+  }
+
+  return indexed;
+}
+
+const PORTRAIT_ASSET_ALIASES = {
+  Leo: "ParrotBoy",
+  LeoMainland: "ParrotBoy",
+};
+
+function indexVanillaPortraitFiles(manifest) {
+  manifest.portraits = manifest.portraits ?? {};
+  const vanillaOut = join(webPublic, "Portraits");
+  if (!existsSync(vanillaOut)) {
+    return 0;
+  }
+
+  let indexed = 0;
+  for (const fileName of readdirSync(vanillaOut)) {
+    if (!fileName.toLowerCase().endsWith(".png") || fileName.includes("/")) {
+      continue;
+    }
+
+    const characterName = fileName.replace(/\.png$/i, "");
+    const url = toPublicUrl(webPublic, join(vanillaOut, fileName));
+    if (!manifest.portraits[characterName]) {
+      manifest.portraits[characterName] = url;
+      indexed += 1;
+    }
+    if (!manifest.portraitSources[characterName]) {
+      manifest.portraitSources[characterName] = url;
+    }
+  }
+
+  for (const [npcName, assetName] of Object.entries(PORTRAIT_ASSET_ALIASES)) {
+    const url = manifest.portraits[assetName] ?? manifest.portraitSources[assetName];
+    if (!url) {
+      continue;
+    }
+
+    if (!manifest.portraits[npcName]) {
+      manifest.portraits[npcName] = url;
+    }
+    if (!manifest.portraitSources[npcName]) {
+      manifest.portraitSources[npcName] = url;
+    }
+  }
+
+  return indexed;
 }
 
 function findContentPackRoot(filePath) {
@@ -199,12 +421,21 @@ function main() {
   manifest.portraitGrids = manifest.portraitGrids ?? {};
 
   const portraitureCopied = syncPortraitureSources(manifest);
-  const cpCopied = syncContentPatcherPortraits(manifest);
+  const copiedKeys = new Set();
+  const cpCopied = [];
+  syncContentPatcherPortraits(manifest, copiedKeys, cpCopied);
+
+  const assetDirCopied = syncCharacterPortraitAssetDirs(manifest, copiedKeys, cpCopied);
+  const orphanIndexed = indexOrphanPortraitFiles(manifest);
+  const vanillaIndexed = indexVanillaPortraitFiles(manifest);
 
   writeFileSync(localManifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   console.log(`Wrote ${localManifestPath}`);
   console.log(`Portraiture sources: ${portraitureCopied.length}`);
   console.log(`Content Patcher portrait sources: ${cpCopied.length}`);
+  console.log(`CharacterFiles portrait dirs: ${assetDirCopied}`);
+  console.log(`Indexed orphan portrait files: ${orphanIndexed}`);
+  console.log(`Indexed vanilla portrait files: ${vanillaIndexed}`);
 }
 
 main();

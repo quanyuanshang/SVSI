@@ -99,9 +99,10 @@ export function FilterPanel({
         </div>
         <PortraitFilterGrid
           npcNames={featuredNpcNames}
-          selectedNpcNames={filters.selectedNpcNames}
-          onToggleNpcName={onToggleNpcName}
+          npcPortraitModIds={availableOptions.npcPortraitModIds}
           overflowNpcNames={remainingNpcNames}
+          onToggleNpcName={onToggleNpcName}
+          selectedNpcNames={filters.selectedNpcNames}
         />
       </div>
 
@@ -188,11 +189,13 @@ function PortraitFilterGrid({
   selectedNpcNames,
   onToggleNpcName,
   overflowNpcNames = [],
+  npcPortraitModIds,
 }: {
   npcNames: string[];
   selectedNpcNames: ReadonlySet<string>;
   onToggleNpcName: (npcName: string) => void;
   overflowNpcNames?: string[];
+  npcPortraitModIds?: ReadonlyMap<string, string>;
 }) {
   return (
     <div className="portrait-filter-grid">
@@ -204,7 +207,11 @@ function PortraitFilterGrid({
           title={npcName}
           type="button"
         >
-          <CharacterPortrait name={npcName} size="sm" />
+          <CharacterPortrait
+            name={npcName}
+            size="sm"
+            sourceModId={npcPortraitModIds?.get(npcName)}
+          />
           <span>{formatNpcFilterLabel(npcName)}</span>
         </button>
       ))}
@@ -216,6 +223,7 @@ function PortraitFilterGrid({
           <div className="portrait-filter-more__panel">
             <PortraitFilterGrid
               npcNames={overflowNpcNames}
+              npcPortraitModIds={npcPortraitModIds}
               selectedNpcNames={selectedNpcNames}
               onToggleNpcName={onToggleNpcName}
             />

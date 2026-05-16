@@ -142,7 +142,62 @@ export function getAvailableFilterOptions(
     npcNames: npcOptions.map((option) => option.representative),
     locationEquivalents: buildEquivalenceMap(locationOptions),
     npcEquivalents: buildEquivalenceMap(npcOptions),
+    npcPortraitModIds: buildNpcPortraitModIdMap(nodes, catalogOptions?.translationCatalog ?? null),
   };
+}
+
+function buildNpcPortraitModIdMap(
+  nodes: StoryNodeEvaluation[],
+  catalog: TranslationCatalog | null,
+): Map<string, string> {
+  const votes = new Map<string, Map<string, number>>();
+
+  const recordVote = (npcName: string, sourceModId?: string | null) => {
+    const modId = sourceModId?.trim();
+    if (!modId) {
+      return;
+    }
+
+    const npc = npcName.trim();
+    if (!npc) {
+      return;
+    }
+
+    const modVotes = votes.get(npc) ?? new Map<string, number>();
+    modVotes.set(modId, (modVotes.get(modId) ?? 0) + 1);
+    votes.set(npc, modVotes);
+  };
+
+  for (const entry of catalog?.entries ?? []) {
+    if (entry.category?.toLowerCase() !== "npc" || !entry.sourceModId) {
+      continue;
+    }
+
+    recordVote(entry.raw, entry.sourceModId);
+  }
+
+  for (const node of nodes) {
+    if (!node.sourceModId) {
+      continue;
+    }
+
+    for (const npcName of collectNpcNames(node)) {
+      recordVote(npcName, node.sourceModId);
+    }
+  }
+
+  const result = new Map<string, string>();
+  for (const [npcName, modVotes] of votes) {
+    const ranked = [...modVotes.entries()].sort((left, right) => right[1] - left[1]);
+    const [topModId, topCount] = ranked[0];
+    const runnerUpCount = ranked[1]?.[1] ?? 0;
+
+    if (topModId && topCount > runnerUpCount) {
+      result.set(npcName, topModId);
+    }
+  }
+
+  return result;
 }
 
 // Expand each selected raw value back to the set of all raws that share the

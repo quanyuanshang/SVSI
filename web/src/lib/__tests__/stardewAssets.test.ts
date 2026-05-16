@@ -46,6 +46,8 @@ const manifest: StardewUiManifest = {
   },
   portraitSources: {
     "Portraiture/Portraits7/Sebastian": "/generated/stardew-ui/Portraiture/Portraits7/Sebastian.png",
+    "FlashShifter.StardewValleyExpandedCP/Lance":
+      "/generated/stardew-ui/Portraits/FlashShifter.StardewValleyExpandedCP/Lance.png",
   },
   portraiture: {
     active: "Portraits7",
@@ -144,6 +146,29 @@ describe("stardewAssets", () => {
       hdUrl: "/generated/stardew-ui/Portraiture/Portraits7/Sebastian.png",
       baseUrl: "/generated/stardew-ui/Portraits/Sebastian.png",
       sourceLabel: "Portraiture: Portraits7",
+    });
+  });
+
+  it("resolves a unique mod portrait suffix when sourceModId is omitted", () => {
+    expect(resolvePortraitSource("Lance", manifest)).toMatchObject({
+      characterName: "Lance",
+      hdUrl: "/generated/stardew-ui/Portraits/FlashShifter.StardewValleyExpandedCP/Lance.png",
+      sourceLabel: "FlashShifter.StardewValleyExpandedCP",
+    });
+  });
+
+  it("maps Leo to the vanilla ParrotBoy portrait sheet", () => {
+    const withParrotBoy = mergeStardewManifests(manifest, {
+      version: 1,
+      portraits: {
+        ParrotBoy: "/generated/stardew-ui/Portraits/ParrotBoy.png",
+      },
+    });
+
+    expect(resolvePortraitSource("Leo", withParrotBoy)).toMatchObject({
+      characterName: "Leo",
+      hdUrl: "/generated/stardew-ui/Portraits/ParrotBoy.png",
+      baseUrl: "/generated/stardew-ui/Portraits/ParrotBoy.png",
     });
   });
 
