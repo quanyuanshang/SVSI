@@ -1,3 +1,7 @@
+import { CharacterPortrait } from "./CharacterPortrait";
+import { StardewButton } from "./StardewButton";
+import { StardewNineSlicePanel } from "./StardewNineSlicePanel";
+import { StardewSpriteIcon } from "./StardewSpriteIcon";
 import {
   formatLocationZh,
   formatStardewDate,
@@ -22,55 +26,66 @@ export function RuntimeHeader({
   error,
 }: RuntimeHeaderProps) {
   return (
-    <section className="panel runtime-header">
-      <div className="runtime-header__title-row">
+    <StardewNineSlicePanel as="section" className="panel runtime-header" variant="darkWood">
+      <div className="runtime-player-card">
+        <CharacterPortrait label={runtimeState?.playerName ?? "农夫"} size="lg" />
         <div>
-          <p className="eyebrow">运行时快照</p>
-          <h1>Stardew Story Inspector</h1>
-        </div>
-        <button
-          className="action-button"
-          onClick={() => {
-            void onRefresh();
-          }}
-          type="button"
-        >
-          {loading ? "刷新中..." : "立即刷新"}
-        </button>
-      </div>
-
-      {error && <p className="status-banner status-banner--error">{error}</p>}
-
-      <div className="runtime-grid">
-        <div className="runtime-pill runtime-pill--wide">
-          <span className="runtime-pill__label">玩家</span>
+          <span>玩家</span>
           <strong>{runtimeState?.playerName ?? "未知玩家"}</strong>
-        </div>
-        <div className="runtime-pill runtime-pill--wide">
-          <span className="runtime-pill__label">日期</span>
-          <strong>{formatStardewDate(runtimeState)}</strong>
-        </div>
-        <div className="runtime-pill">
-          <span className="runtime-pill__label">时间</span>
-          <strong>{formatStardewTime(runtimeState?.time)}</strong>
-        </div>
-        <div className="runtime-pill">
-          <span className="runtime-pill__label">天气</span>
-          <strong>{formatWeatherZh(runtimeState?.weather)}</strong>
-        </div>
-        <div className="runtime-pill">
-          <span className="runtime-pill__label">地点</span>
-          <strong title={runtimeState?.currentLocation || undefined}>
-            {formatLocationZh(runtimeState?.currentLocation)}
-          </strong>
-        </div>
-        <div className="runtime-pill">
-          <span className="runtime-pill__label">最后加载</span>
-          <strong>
-            {lastLoadedAt ? lastLoadedAt.toLocaleTimeString() : "尚未加载"}
-          </strong>
+          <small>农夫</small>
         </div>
       </div>
-    </section>
+
+      <RuntimeFact label="存档时间" value={formatStardewTime(runtimeState?.time)} />
+      <RuntimeFact label="日期" value={formatStardewDate(runtimeState)} wide />
+      <RuntimeFact label="天气" value={formatWeatherZh(runtimeState?.weather)} />
+      <RuntimeFact
+        label="地点"
+        value={formatLocationZh(runtimeState?.currentLocation)}
+        title={runtimeState?.currentLocation ?? undefined}
+      />
+      <RuntimeFact
+        label="游戏时长"
+        value={lastLoadedAt ? lastLoadedAt.toLocaleTimeString() : "尚未加载"}
+      />
+
+      <div className="runtime-asset-smoke" aria-label="Stardew sprite resolver preview">
+        <StardewSpriteIcon spriteKey="icon.scrollUp" size={22} title="scroll up" fallback="↑" />
+        <StardewSpriteIcon spriteKey="icon.scrollDown" size={22} title="scroll down" fallback="↓" />
+        <StardewSpriteIcon spriteKey="debug.missing" size={22} title="missing sprite fallback" fallback="?" />
+        <a href="/stardew-assets-debug">资源标注</a>
+      </div>
+
+      <StardewButton
+        className="action-button"
+        onClick={() => {
+          void onRefresh();
+        }}
+        type="button"
+      >
+        {loading ? "刷新中..." : "刷新快照"}
+      </StardewButton>
+
+      {error ? <p className="status-banner status-banner--error">{error}</p> : null}
+    </StardewNineSlicePanel>
+  );
+}
+
+function RuntimeFact({
+  label,
+  value,
+  title,
+  wide = false,
+}: {
+  label: string;
+  value: string;
+  title?: string;
+  wide?: boolean;
+}) {
+  return (
+    <div className={`runtime-fact${wide ? " runtime-fact--wide" : ""}`}>
+      <span>{label}</span>
+      <strong title={title}>{value}</strong>
+    </div>
   );
 }

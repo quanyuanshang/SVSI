@@ -97,6 +97,18 @@ describe("diagnoseEventTrigger", () => {
     expect(result.unsatisfied.some((i) => i.conditionRaw.startsWith("location "))).toBe(false);
   });
 
+  it("location compare unwraps Content Patcher location tokens", () => {
+    const node = makeNode({ location: "{{FarmHouse}}", rawPreconditions: [] });
+    const result = diagnoseEventTrigger(node, {
+      ...baseState,
+      location: "FarmHouse",
+    });
+
+    const item = result.satisfied.find((i) => i.conditionRaw.startsWith("location "));
+    expect(item?.reasonZh).toContain("地点满足");
+    expect(result.unsatisfied.some((i) => i.conditionRaw.startsWith("location "))).toBe(false);
+  });
+
   it("location truly distinct (Farmhouse interior vs Farm exterior) still mismatches", () => {
     const node = makeNode({ location: "Farmhouse", rawPreconditions: [] });
     const result = diagnoseEventTrigger(node, { ...baseState, location: "Farm" });

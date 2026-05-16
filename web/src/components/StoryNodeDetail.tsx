@@ -19,6 +19,7 @@ import {
   type DiagnosisResult,
 } from "../lib/triggerDiagnosis";
 import { translateCharacter, translateLocation } from "../lib/translations";
+import type { StoryEventNode, StoryGraphReference } from "../lib/storyGraph";
 import type { ObservedEventHistoryEntry } from "../types/history";
 import type {
   ConditionAtomResult,
@@ -31,6 +32,7 @@ interface StoryNodeDetailProps {
   historyEntries?: ObservedEventHistoryEntry[];
   runtimeState?: RuntimeGameState | null;
   availableEventIds?: ReadonlySet<string>;
+  storyNode?: StoryEventNode | null;
 }
 
 function renderAtomValue(atom: ConditionAtomResult): string {
@@ -118,6 +120,7 @@ export function StoryNodeDetail({
   historyEntries = [],
   runtimeState,
   availableEventIds,
+  storyNode,
 }: StoryNodeDetailProps) {
   const gameState = useMemo<CurrentGameState>(
     () => buildGameStateFromRuntime(runtimeState),
@@ -152,10 +155,16 @@ export function StoryNodeDetail({
   const locationTranslation = translateLocation(node.location, node.sourceModId);
 
   return (
-    <section className="panel story-node-detail">
-      <div className="panel-heading">
-        <h2>事件详情</h2>
-        <p>{node.nodeId ?? "未知节点"}</p>
+    <section className="panel story-node-detail compendium-card">
+      <div className="compendium-card__cover">
+        <div>
+          <p className="eyebrow">Event Compendium</p>
+          <h2>{storyNode?.displayName ?? node.eventId ?? "未知事件"}</h2>
+          <p>{node.nodeId ?? "未知节点"}</p>
+        </div>
+        <span className={`journal-badge journal-badge--${node.status ?? "Unknown"}`}>
+          {formatStatusLabel(node.status)}
+        </span>
       </div>
 
       <dl className="detail-grid">
@@ -222,6 +231,32 @@ export function StoryNodeDetail({
           </ul>
         )}
       </div>
+
+      {storyNode ? (
+        <div className="detail-block">
+          <h3>剧情关系</h3>
+          <RelationshipList
+            title="Prerequisites 前置事件"
+            references={storyNode.prerequisites}
+          />
+          <RelationshipList
+            title="Dependents 后续事件"
+            references={storyNode.dependents}
+          />
+          <Checklist
+            title="Unmet conditions 未满足条件"
+            items={storyNode.unmetConditions}
+            emptyText="没有从可评估条件里发现未满足项。"
+            variant="blocked"
+          />
+          <Checklist
+            title="Unresolved / warning conditions 未解析条件"
+            items={storyNode.unresolvedConditions}
+            emptyText="没有未解析条件。"
+            variant="warning"
+          />
+        </div>
+      ) : null}
 
       {diagnosis ? (
         <div className="detail-block">
@@ -406,5 +441,72 @@ export function StoryNodeDetail({
         </details>
       </div>
     </section>
+  );
+}
+
+function RelationshipList({
+  title,
+  references,
+}: {
+  title: string;
+  references: StoryGraphReference[];
+}) {
+  return (
+    <div className="compendium-section">
+      <h4>{title}</h4>
+      {references.length === 0 ? (
+        <p className="empty-state">暂无关系。</p>
+      ) : (
+        <ul className="relationship-list">
+          {references.map((reference) => (
+            <li
+              className={
+                reference.node
+                  ? "relationship-item"
+                  : "relationship-item relationship-item--warning"
+              }
+              key={`${title}-${reference.eventId}-${reference.node?.key ?? "missing"}`}
+            >
+              <strong>{reference.eventId}</strong>
+              <span>
+                {reference.node
+                  ? `${reference.node.modName ?? "未知 Mod"} / ${formatLocationZh(
+                      reference.node.location,
+                      reference.node.source.sourceModId,
+                    )}`
+                  : "未在当前索引中找到完整节点"}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function Checklist({
+  title,
+  items,
+  emptyText,
+  variant,
+}: {
+  title: string;
+  items: string[];
+  emptyText: string;
+  variant: "blocked" | "warning";
+}) {
+  return (
+    <div className={`compendium-section compendium-section--${variant}`}>
+      <h4>{title}</h4>
+      {items.length === 0 ? (
+        <p className="empty-state">{emptyText}</p>
+      ) : (
+        <ul className="checklist">
+          {items.map((item) => (
+            <li key={`${title}-${item}`}>{item}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }

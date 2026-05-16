@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "extract:stardew-ui": "node ../scripts/extract-stardew-ui-assets.mjs",
+    "preview:event-node-sprites": "node ../scripts/preview-event-node-sprites.mjs",
+    "sync:mod-portraits": "node ../scripts/sync-mod-portraits.mjs",
     "preview": "vite preview",
     "test": "vitest run"
   },

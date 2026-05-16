@@ -88,6 +88,12 @@ function normalizeNameKey(value?: string | null): string {
   return (value ?? "").trim().toLowerCase();
 }
 
+function normalizeLocationKey(value?: string | null): string {
+  const trimmed = (value ?? "").trim();
+  const tokenMatch = trimmed.match(/^\{\{\s*(.+?)\s*\}\}$/);
+  return normalizeNameKey(tokenMatch?.[1] ?? trimmed);
+}
+
 function normalizeStringList(values?: readonly string[] | null): string[] {
   return (values ?? []).map((value) => value.trim()).filter((value) => value.length > 0);
 }
@@ -1210,7 +1216,7 @@ function evaluateLocation(node: StoryNodeEvaluation, state: CurrentGameState): D
     };
   }
 
-  const matches = normalizeNameKey(state.location) === normalizeNameKey(required);
+  const matches = normalizeLocationKey(state.location) === normalizeLocationKey(required);
   const requiredZh = formatLocationZh(required, node.sourceModId);
   const actualZh = formatLocationZh(state.location, node.sourceModId);
   return {

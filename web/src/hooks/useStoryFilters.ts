@@ -21,6 +21,7 @@ interface UseStoryFiltersResult {
   toggleModName: (modName: string) => void;
   toggleLocation: (location: string) => void;
   toggleNpcName: (npcName: string) => void;
+  clearFilters: () => void;
 }
 
 const INITIAL_FILTERS: StoryFilterState = {
@@ -115,6 +116,17 @@ export function useStoryFilters(
         ...current,
         selectedNpcNames: toggleSetValue(current.selectedNpcNames, npcName),
       }));
+    },
+    clearFilters: () => {
+      setFilters({
+        selectedStatuses: new Set<StoryNodeStatus>(),
+        selectedModNames: new Set<string>(),
+        selectedLocations: new Set<string>(),
+        selectedNpcNames: new Set<string>(),
+        hideTriggered: false,
+        hideNonTriggerable: true,
+        searchText: "",
+      });
     },
   };
 }

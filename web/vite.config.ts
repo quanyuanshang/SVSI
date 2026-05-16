@@ -115,7 +115,8 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), storyStateApiPlugin()],
-    publicDir: path.resolve(rootDir, "../shared"),
+    // Vite serves files from public/ at the site root (e.g. public/generated → /generated/...).
+    publicDir: path.resolve(rootDir, "public"),
     server: {
       fs: {
         allow: [path.resolve(rootDir, "..")],

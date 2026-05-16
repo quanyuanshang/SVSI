@@ -1,3 +1,6 @@
+import { CharacterPortrait } from "./CharacterPortrait";
+import { StardewButton } from "./StardewButton";
+import { StardewNineSlicePanel } from "./StardewNineSlicePanel";
 import { formatStatusLabel } from "../lib/format";
 import { formatNpcFilterLabel, translateLocation } from "../lib/translations";
 import type {
@@ -17,6 +20,7 @@ interface FilterPanelProps {
   onToggleNpcName: (npcName: string) => void;
   onHideTriggeredChange: (value: boolean) => void;
   onSearchTextChange: (value: string) => void;
+  onClearFilters: () => void;
 }
 
 const STATUS_ORDER: StoryNodeStatus[] = [
@@ -25,6 +29,19 @@ const STATUS_ORDER: StoryNodeStatus[] = [
   "Locked",
   "Unknown",
   "Triggered",
+];
+
+const FEATURED_CHARACTER_ORDER = [
+  "Sebastian",
+  "Sam",
+  "Alex",
+  "Wizard",
+  "Harvey",
+  "Lance",
+  "Elliott",
+  "Shane",
+  "Victor",
+  "Magnus",
 ];
 
 export function FilterPanel({
@@ -38,27 +55,28 @@ export function FilterPanel({
   onToggleNpcName,
   onHideTriggeredChange,
   onSearchTextChange,
+  onClearFilters,
 }: FilterPanelProps) {
+  const selectedNpcCount = filters.selectedNpcNames.size;
+  const featuredNpcNames = getFeaturedNpcNames(availableOptions.npcNames);
+  const remainingNpcNames = availableOptions.npcNames.filter(
+    (npcName) => !featuredNpcNames.includes(npcName),
+  );
+
   return (
-    <aside className="panel filter-panel">
-      <div className="panel-heading">
-        <h2>筛选条件</h2>
-        <p>默认按中文展示，raw 名称保留在提示里。</p>
+    <StardewNineSlicePanel as="aside" className="panel filter-panel" variant="board">
+      <div className="brand-card">
+        <div className="brand-chicken" aria-hidden="true">SV</div>
+        <div>
+          <h1>Stardew</h1>
+          <p>Story Inspector</p>
+        </div>
       </div>
 
       <div className="summary-stat">
         <span className="summary-stat__label">事件总数</span>
         <strong>{totalNodeCount ?? 0}</strong>
       </div>
-
-      <ul className="status-count-list">
-        {STATUS_ORDER.map((status) => (
-          <li className="status-count-row" key={status}>
-            <span>{formatStatusLabel(status)}</span>
-            <strong>{statusCounts?.[status] ?? 0}</strong>
-          </li>
-        ))}
-      </ul>
 
       <div className="filter-section">
         <label className="filter-label" htmlFor="story-search">
@@ -68,56 +86,147 @@ export function FilterPanel({
           className="filter-input"
           id="story-search"
           onChange={(event) => onSearchTextChange(event.target.value)}
-          placeholder="搜索事件、Mod、地点、角色、原因..."
+          placeholder="搜索事件、Mod、角色、地点..."
           type="search"
           value={filters.searchText}
         />
       </div>
 
       <div className="filter-section">
-        <label className="checkbox-row">
-          <input
-            checked={filters.hideTriggered}
-            onChange={(event) => onHideTriggeredChange(event.target.checked)}
-            type="checkbox"
-          />
-          <span>隐藏已触发事件</span>
-        </label>
+        <div className="filter-label-row">
+          <p className="filter-label">角色</p>
+          <span>{selectedNpcCount ? `已选 ${selectedNpcCount}` : "角色图鉴入口"}</span>
+        </div>
+        <PortraitFilterGrid
+          npcNames={featuredNpcNames}
+          selectedNpcNames={filters.selectedNpcNames}
+          onToggleNpcName={onToggleNpcName}
+          overflowNpcNames={remainingNpcNames}
+        />
       </div>
 
-      <FilterGroup
-        label="触发状态"
-        options={availableOptions.statuses}
-        selectedOptions={filters.selectedStatuses}
-        renderOption={(value) => formatStatusLabel(value as StoryNodeStatus)}
-        onToggleOption={(status) => onToggleStatus(status as StoryNodeStatus)}
-      />
-      <FilterGroup
-        label="来源 Mod"
-        options={availableOptions.modNames}
-        selectedOptions={filters.selectedModNames}
-        onToggleOption={onToggleModName}
-      />
-      <FilterGroup
-        label="地点"
-        options={availableOptions.locations}
-        selectedOptions={filters.selectedLocations}
-        renderOption={(value) => translateLocation(value).zh}
-        onToggleOption={onToggleLocation}
-      />
-      <FilterGroup
-        label="角色"
-        options={availableOptions.npcNames}
-        selectedOptions={filters.selectedNpcNames}
-        renderOption={(value) => formatNpcFilterLabel(value)}
-        onToggleOption={onToggleNpcName}
-      />
-    </aside>
+      <details className="filter-section" open>
+        <summary className="filter-label">状态筛选</summary>
+        <ul className="status-count-list">
+          {STATUS_ORDER.map((status) => (
+            <li className="status-count-row" key={status}>
+              <label className="checkbox-row">
+                <input
+                  checked={filters.selectedStatuses.has(status)}
+                  onChange={() => onToggleStatus(status)}
+                  type="checkbox"
+                />
+                <span>{formatStatusLabel(status)}</span>
+              </label>
+              <strong>{statusCounts?.[status] ?? 0}</strong>
+            </li>
+          ))}
+        </ul>
+      </details>
+
+      <details className="filter-section">
+        <summary className="filter-label">Mod 筛选</summary>
+        <FilterGroup
+          options={availableOptions.modNames}
+          selectedOptions={filters.selectedModNames}
+          onToggleOption={onToggleModName}
+        />
+      </details>
+
+      <details className="filter-section">
+        <summary className="filter-label">地点</summary>
+        <FilterGroup
+          options={availableOptions.locations}
+          selectedOptions={filters.selectedLocations}
+          renderOption={(value) => translateLocation(value).zh}
+          onToggleOption={onToggleLocation}
+        />
+      </details>
+
+      <label className="checkbox-row filter-muted-row">
+        <input
+          checked={filters.hideTriggered}
+          onChange={(event) => onHideTriggeredChange(event.target.checked)}
+          type="checkbox"
+        />
+        <span>隐藏已触发事件</span>
+      </label>
+
+      <StardewButton className="clear-filter-button" onClick={onClearFilters} tone="quiet" type="button">
+        清空筛选
+      </StardewButton>
+    </StardewNineSlicePanel>
+  );
+}
+
+function getFeaturedNpcNames(npcNames: string[]): string[] {
+  const selected: string[] = [];
+  const byLower = new Map(npcNames.map((name) => [name.toLowerCase(), name]));
+
+  for (const preferred of FEATURED_CHARACTER_ORDER) {
+    const match = byLower.get(preferred.toLowerCase());
+    if (match && !selected.includes(match)) {
+      selected.push(match);
+    }
+  }
+
+  for (const npcName of npcNames) {
+    if (selected.length >= 10) {
+      break;
+    }
+
+    if (!selected.includes(npcName)) {
+      selected.push(npcName);
+    }
+  }
+
+  return selected.slice(0, 10);
+}
+
+function PortraitFilterGrid({
+  npcNames,
+  selectedNpcNames,
+  onToggleNpcName,
+  overflowNpcNames = [],
+}: {
+  npcNames: string[];
+  selectedNpcNames: ReadonlySet<string>;
+  onToggleNpcName: (npcName: string) => void;
+  overflowNpcNames?: string[];
+}) {
+  return (
+    <div className="portrait-filter-grid">
+      {npcNames.map((npcName) => (
+        <button
+          className={`portrait-filter${selectedNpcNames.has(npcName) ? " portrait-filter--selected" : ""}`}
+          key={npcName}
+          onClick={() => onToggleNpcName(npcName)}
+          title={npcName}
+          type="button"
+        >
+          <CharacterPortrait name={npcName} size="sm" />
+          <span>{formatNpcFilterLabel(npcName)}</span>
+        </button>
+      ))}
+      {overflowNpcNames.length > 0 ? (
+        <details className="portrait-filter-more portrait-filter-more--inline">
+          <summary aria-label={`展开全部 ${npcNames.length + overflowNpcNames.length} 个角色`}>
+            +
+          </summary>
+          <div className="portrait-filter-more__panel">
+            <PortraitFilterGrid
+              npcNames={overflowNpcNames}
+              selectedNpcNames={selectedNpcNames}
+              onToggleNpcName={onToggleNpcName}
+            />
+          </div>
+        </details>
+      ) : null}
+    </div>
   );
 }
 
 interface FilterGroupProps {
-  label: string;
   options: string[];
   selectedOptions: ReadonlySet<string>;
   onToggleOption: (value: string) => void;
@@ -125,31 +234,25 @@ interface FilterGroupProps {
 }
 
 function FilterGroup({
-  label,
   options,
   selectedOptions,
   onToggleOption,
   renderOption,
 }: FilterGroupProps) {
-  return (
-    <div className="filter-section">
-      <p className="filter-label">{label}</p>
-      {options.length === 0 ? (
-        <p className="filter-empty">暂无可选项</p>
-      ) : (
-        <div className="filter-option-list">
-          {options.map((option) => (
-            <label className="checkbox-row" key={option} title={option}>
-              <input
-                checked={selectedOptions.has(option)}
-                onChange={() => onToggleOption(option)}
-                type="checkbox"
-              />
-              <span>{renderOption ? renderOption(option) : option}</span>
-            </label>
-          ))}
-        </div>
-      )}
+  return options.length === 0 ? (
+    <p className="filter-empty">暂无可选项</p>
+  ) : (
+    <div className="filter-option-list">
+      {options.map((option) => (
+        <label className="checkbox-row" key={option} title={option}>
+          <input
+            checked={selectedOptions.has(option)}
+            onChange={() => onToggleOption(option)}
+            type="checkbox"
+          />
+          <span>{renderOption ? renderOption(option) : option}</span>
+        </label>
+      ))}
     </div>
   );
 }

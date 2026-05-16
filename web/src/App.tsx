@@ -1,48 +1,42 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { ActionBoard } from "./components/ActionBoard";
 import { AppShell } from "./components/AppShell";
-import { ConflictPanel } from "./components/ConflictPanel";
-import { DayTimelineView } from "./components/DayTimelineView";
+import { EventDetailView } from "./components/EventDetailView";
 import { FilterPanel } from "./components/FilterPanel";
-import { LocationTranslationDebugPanel } from "./components/LocationTranslationDebugPanel";
-import { ProgressTimelineView } from "./components/ProgressTimelineView";
 import { RuntimeHeader } from "./components/RuntimeHeader";
-import { StoryNodeDetail } from "./components/StoryNodeDetail";
+import { StardewAssetsDebugPage } from "./components/StardewAssetsDebugPage";
+import { StorylineOverview } from "./components/StorylineOverview";
 import { useEventHistory } from "./hooks/useEventHistory";
 import { useStoryFilters } from "./hooks/useStoryFilters";
-import { detectPotentialConflicts } from "./lib/conflictDetection";
 import {
-  buildHistoryNodeMap,
   enrichHistoryEntries,
-  findHistoryEntriesForNode,
 } from "./lib/historyLookup";
+import {
+  buildStoryGraph,
+  findStoryNodeBySource,
+  type StoryEventNode,
+} from "./lib/storyGraph";
 import { useStoryState } from "./hooks/useStoryState";
-import type { ObservedEventHistoryEntry } from "./types/history";
-import type { StoryNodeEvaluation } from "./types/story";
 import "./styles.css";
 
-type AppTab = "today" | "progress";
-
 export default function App() {
+  if (window.location.pathname.startsWith("/stardew-assets-debug")) {
+    return <StardewAssetsDebugPage />;
+  }
+
+  return <InspectorApp />;
+}
+
+function InspectorApp() {
   const { data, loading, error, refresh, lastLoadedAt } = useStoryState();
-  const {
-    data: history,
-    loading: historyLoading,
-    error: historyError,
-    refresh: refreshHistory,
-  } = useEventHistory();
-  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<AppTab>("today");
+  const { data: history, refresh: refreshHistory } = useEventHistory();
+  const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(null);
 
   const nodes = data?.nodes ?? [];
   const historyEntries = useMemo(
     () => enrichHistoryEntries(history?.entries ?? [], nodes),
     [history?.entries, nodes],
   );
-  // useStoryFilters owns translation-catalog loading so the zh-dedup of the
-  // filter option list always runs against the most recent catalog (instead of
-  // racing with App-level useEffect, which previously left the equivalence map
-  // collapsed to "every raw is its own group" on first render and broke
-  // location / NPC filtering on initial paint).
   const {
     filters,
     filteredNodes,
@@ -53,42 +47,25 @@ export default function App() {
     toggleModName,
     toggleLocation,
     toggleNpcName,
+    clearFilters,
   } = useStoryFilters(nodes, data?.translationCatalog, data?.runtimeState);
 
-  const selectedNode = useMemo(() => {
-    if (!selectedNodeId) {
-      return null;
-    }
+  const storyGraph = useMemo(
+    () => buildStoryGraph(nodes, historyEntries, {}, data?.runtimeState),
+    [nodes, historyEntries, data?.runtimeState],
+  );
 
-    return (
-      filteredNodes.find((node) => node.nodeId === selectedNodeId) ??
-      nodes.find((node) => node.nodeId === selectedNodeId) ??
-      null
-    );
-  }, [filteredNodes, nodes, selectedNodeId]);
+  const filteredStoryNodes = useMemo(
+    () =>
+      filteredNodes
+        .map((node) => findStoryNodeBySource(storyGraph, node))
+        .filter((node): node is StoryEventNode => Boolean(node)),
+    [filteredNodes, storyGraph],
+  );
 
-  useEffect(() => {
-    if (!selectedNodeId) {
-      return;
-    }
-
-    if (activeTab !== "today") {
-      return;
-    }
-
-    const exists = filteredNodes.some((node) => node.nodeId === selectedNodeId);
-    if (!exists) {
-      setSelectedNodeId(null);
-    }
-  }, [activeTab, filteredNodes, selectedNodeId]);
-
-  const handleSelectNode = (node: StoryNodeEvaluation) => {
-    setSelectedNodeId(node.nodeId ?? null);
-  };
-
-  const nodesById = useMemo(() => {
-    return buildHistoryNodeMap(nodes);
-  }, [nodes]);
+  const selectedStoryNode = selectedNodeKey
+    ? storyGraph.nodesByKey.get(selectedNodeKey) ?? null
+    : null;
 
   const availableEventIds = useMemo<ReadonlySet<string>>(() => {
     const set = new Set<string>();
@@ -100,37 +77,13 @@ export default function App() {
     return set;
   }, [nodes]);
 
-  const selectedHistoryEntries = useMemo(
-    () => findHistoryEntriesForNode(historyEntries, selectedNode),
-    [historyEntries, selectedNode],
-  );
+  const selectedCharacter =
+    filters.selectedNpcNames.size === 1
+      ? Array.from(filters.selectedNpcNames)[0]
+      : null;
 
-  const potentialConflicts = useMemo(
-    () => detectPotentialConflicts(filteredNodes),
-    [filteredNodes],
-  );
-
-  const conflictCountByNodeId = useMemo(() => {
-    const counts: Record<string, number> = {};
-
-    for (const conflict of potentialConflicts) {
-      counts[conflict.nodeAId] = (counts[conflict.nodeAId] ?? 0) + 1;
-      counts[conflict.nodeBId] = (counts[conflict.nodeBId] ?? 0) + 1;
-    }
-
-    return counts;
-  }, [potentialConflicts]);
-
-  const handleSelectNodeId = (nodeId: string) => {
-    setSelectedNodeId(nodeId);
-  };
-
-  const handleSelectHistoryEntry = (entry: ObservedEventHistoryEntry) => {
-    if (!entry.nodeId || !nodesById.has(entry.nodeId)) {
-      return;
-    }
-
-    setSelectedNodeId(entry.nodeId);
+  const handleSelectStoryNode = (node: StoryEventNode) => {
+    setSelectedNodeKey(node.key);
   };
 
   const handleRefresh = async () => {
@@ -170,68 +123,34 @@ export default function App() {
           onToggleNpcName={toggleNpcName}
           onHideTriggeredChange={setHideTriggered}
           onSearchTextChange={setSearchText}
+          onClearFilters={clearFilters}
         />
       }
       content={
-        <div className="content-stack">
-          <div className="panel">
-            <div className="timeline-item__tags" role="tablist" aria-label="Story view">
-              <button
-                className={`timeline-item__tag${activeTab === "today" ? " timeline-item--selected" : ""}`}
-                onClick={() => setActiveTab("today")}
-                role="tab"
-                aria-selected={activeTab === "today"}
-                type="button"
-              >
-                今日事件
-              </button>
-              <button
-                className={`timeline-item__tag${activeTab === "progress" ? " timeline-item--selected" : ""}`}
-                onClick={() => setActiveTab("progress")}
-                role="tab"
-                aria-selected={activeTab === "progress"}
-                type="button"
-              >
-                事件历史
-              </button>
-            </div>
-          </div>
-
-          {activeTab === "today" ? (
-            <>
-              <LocationTranslationDebugPanel translationCatalog={data?.translationCatalog} />
-              <ConflictPanel
-                conflicts={potentialConflicts}
-                nodesById={nodesById}
-                onSelectNodeId={handleSelectNodeId}
-              />
-              <DayTimelineView
-                runtimeState={data?.runtimeState}
-                nodes={filteredNodes}
-                totalCount={nodes.length}
-                selectedNodeId={selectedNodeId}
-                conflictCountByNodeId={conflictCountByNodeId}
-                onSelectNode={handleSelectNode}
-              />
-            </>
-          ) : (
-            <ProgressTimelineView
-              entries={historyEntries}
-              loading={historyLoading}
-              error={historyError}
-              selectedNodeId={selectedNodeId}
-              onSelectEntry={handleSelectHistoryEntry}
-            />
-          )}
-        </div>
-      }
-      detail={
-        <StoryNodeDetail
-          node={selectedNode}
-          historyEntries={selectedHistoryEntries}
-          runtimeState={data?.runtimeState}
-          availableEventIds={availableEventIds}
-        />
+        selectedStoryNode ? (
+          <EventDetailView
+            graph={storyGraph}
+            node={selectedStoryNode}
+            runtimeState={data?.runtimeState}
+            availableEventIds={availableEventIds}
+            onBack={() => setSelectedNodeKey(null)}
+            onSelectNode={handleSelectStoryNode}
+          />
+        ) : selectedCharacter ? (
+          <StorylineOverview
+            graph={storyGraph}
+            scopedNodes={filteredStoryNodes}
+            characterName={selectedCharacter}
+            onSelectNode={handleSelectStoryNode}
+          />
+        ) : (
+          <ActionBoard
+            runtimeState={data?.runtimeState}
+            nodes={filteredStoryNodes}
+            totalCount={nodes.length}
+            onSelectNode={handleSelectStoryNode}
+          />
+        )
       }
     />
   );
