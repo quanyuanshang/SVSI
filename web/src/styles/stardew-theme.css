@@ -16,6 +16,22 @@
   --sd-wood-highlight: #df7f12;
   --sd-wood-shadow: #a84708;
   --sd-wood-inner-dark: #5b2b2a;
+  --sd-cursor: url("/generated/stardew-ui/icons/mouse.png") 0 0, auto;
+}
+
+html,
+body {
+  cursor: var(--sd-cursor);
+}
+
+button,
+a,
+input,
+select,
+textarea,
+[role="button"],
+.event-node-card {
+  cursor: var(--sd-cursor);
 }
 
 .app-layout {
