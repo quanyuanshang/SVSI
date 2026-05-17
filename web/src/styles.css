@@ -2086,6 +2086,7 @@ select {
   position: relative;
   max-height: 72vh;
   overflow: auto;
+  overscroll-behavior: contain;
   border-radius: 14px;
   border: 2px solid rgba(95, 59, 32, 0.2);
   background:
@@ -2097,12 +2098,43 @@ select {
   background-size: 16px 16px;
 }
 
+.debug-atlas-stage {
+  position: relative;
+  flex: 0 0 auto;
+}
+
 .debug-atlas-frame img {
   display: block;
   max-width: none;
   image-rendering: pixelated;
   user-select: none;
   touch-action: none;
+}
+
+.debug-atlas-zoom {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.debug-atlas-zoom button {
+  min-width: 36px;
+  min-height: 32px;
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(95, 59, 32, 0.22);
+  background: rgba(255, 248, 226, 0.88);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.debug-atlas-zoom output {
+  min-width: 52px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 900;
 }
 
 .debug-selection {
@@ -2265,6 +2297,44 @@ select {
   font-size: 0.82rem;
 }
 
+.debug-url-probe__row {
+  display: grid;
+  gap: 4px;
+}
+
+.debug-url-probe__row span:first-child {
+  font-weight: 800;
+  color: var(--wood-dark);
+}
+
+.debug-atlas-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.debug-atlas-tabs button {
+  min-height: 36px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(95, 59, 32, 0.22);
+  background: rgba(255, 248, 226, 0.88);
+  color: var(--ink);
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.debug-atlas-tabs button.is-selected {
+  border-color: rgba(47, 109, 70, 0.58);
+  box-shadow: inset 0 0 0 2px rgba(47, 109, 70, 0.18);
+}
+
+.debug-atlas-tabs button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .debug-url-probe code {
   word-break: break-all;
 }
@@ -2354,10 +2424,51 @@ select {
   gap: 10px;
 }
 
+.debug-sprite-result {
+  border-radius: 12px;
+  border: 1px solid rgba(95, 59, 32, 0.2);
+  overflow: hidden;
+}
+
+.debug-sprite-result__header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(255, 248, 226, 0.92);
+  border-bottom: 1px solid rgba(95, 59, 32, 0.12);
+}
+
+.debug-sprite-result__header span {
+  color: var(--muted-ink);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.debug-sprite-result__body {
+  min-height: 120px;
+  max-height: 360px;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.debug-sprite-fit {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 100%;
+  max-height: 160px;
+  overflow: auto;
+}
+
 .debug-preview-panel {
   border-radius: 12px;
   border: 1px solid rgba(95, 59, 32, 0.16);
-  overflow: hidden;
+  overflow: visible;
 }
 
 .debug-preview-panel header {
@@ -2376,8 +2487,11 @@ select {
 
 .debug-preview-panel__body {
   min-height: 88px;
-  display: grid;
-  place-items: center;
+  max-height: 180px;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 12px;
 }
 

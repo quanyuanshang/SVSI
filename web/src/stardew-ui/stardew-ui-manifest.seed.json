@@ -41,8 +41,18 @@
   "sprites": {
     "ui.windowBorder.default": {
       "asset": "LooseSprites/Cursors",
-      "rect": { "x": 384, "y": 373, "w": 18, "h": 18 },
-      "nineSlice": { "top": 6, "right": 6, "bottom": 6, "left": 6 },
+      "rect": {
+        "x": 384,
+        "y": 373,
+        "w": 18,
+        "h": 18
+      },
+      "nineSlice": {
+        "top": 6,
+        "right": 6,
+        "bottom": 6,
+        "left": 6
+      },
       "type": "borderPatch",
       "source": "official-wiki:Modding:Shops",
       "confidence": "high",
@@ -50,7 +60,12 @@
     },
     "ui.shop.portraitBackground": {
       "asset": "LooseSprites/Cursors",
-      "rect": { "x": 603, "y": 414, "w": 74, "h": 74 },
+      "rect": {
+        "x": 603,
+        "y": 414,
+        "w": 74,
+        "h": 74
+      },
       "type": "backgroundPatch",
       "source": "official-wiki:Modding:Shops",
       "confidence": "high",
@@ -58,7 +73,12 @@
     },
     "ui.shop.dialogueBackground": {
       "asset": "Maps/MenuTiles",
-      "rect": { "x": 0, "y": 256, "w": 60, "h": 60 },
+      "rect": {
+        "x": 0,
+        "y": 256,
+        "w": 60,
+        "h": 60
+      },
       "type": "tile",
       "source": "official-wiki:Modding:Shops",
       "confidence": "high",
@@ -66,7 +86,12 @@
     },
     "ui.shop.itemRowBackground": {
       "asset": "LooseSprites/Cursors",
-      "rect": { "x": 384, "y": 396, "w": 15, "h": 15 },
+      "rect": {
+        "x": 384,
+        "y": 396,
+        "w": 15,
+        "h": 15
+      },
       "type": "backgroundPatch",
       "source": "official-wiki:Modding:Shops",
       "confidence": "high",
@@ -74,7 +99,12 @@
     },
     "ui.shop.itemIconBackground": {
       "asset": "LooseSprites/Cursors",
-      "rect": { "x": 296, "y": 363, "w": 18, "h": 18 },
+      "rect": {
+        "x": 296,
+        "y": 363,
+        "w": 18,
+        "h": 18
+      },
       "type": "backgroundPatch",
       "source": "official-wiki:Modding:Shops",
       "confidence": "high",
@@ -82,7 +112,12 @@
     },
     "icon.scrollUp": {
       "asset": "LooseSprites/Cursors",
-      "rect": { "x": 421, "y": 459, "w": 11, "h": 12 },
+      "rect": {
+        "x": 421,
+        "y": 459,
+        "w": 11,
+        "h": 12
+      },
       "type": "icon",
       "source": "official-wiki:Modding:Shops",
       "confidence": "high",
@@ -90,7 +125,12 @@
     },
     "icon.scrollDown": {
       "asset": "LooseSprites/Cursors",
-      "rect": { "x": 421, "y": 472, "w": 11, "h": 12 },
+      "rect": {
+        "x": 421,
+        "y": 472,
+        "w": 11,
+        "h": 12
+      },
       "type": "icon",
       "source": "official-wiki:Modding:Shops",
       "confidence": "high",
@@ -98,7 +138,12 @@
     },
     "ui.scrollBar.front": {
       "asset": "LooseSprites/Cursors",
-      "rect": { "x": 435, "y": 463, "w": 6, "h": 10 },
+      "rect": {
+        "x": 435,
+        "y": 463,
+        "w": 6,
+        "h": 10
+      },
       "type": "scrollbarPatch",
       "source": "official-wiki:Modding:Shops",
       "confidence": "high",
@@ -106,11 +151,198 @@
     },
     "ui.scrollBar.back": {
       "asset": "LooseSprites/Cursors",
-      "rect": { "x": 403, "y": 383, "w": 6, "h": 6 },
+      "rect": {
+        "x": 403,
+        "y": 383,
+        "w": 6,
+        "h": 6
+      },
       "type": "scrollbarPatch",
       "source": "official-wiki:Modding:Shops",
       "confidence": "high",
       "notes": "Default shop ScrollBarBackSourceRect."
+    },
+    "icon.todook": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 126,
+        "y": 254,
+        "w": 68,
+        "h": 67
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.todonotok": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 193,
+        "y": 255,
+        "w": 62,
+        "h": 64
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.done": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 340,
+        "y": 409,
+        "w": 25,
+        "h": 11
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.new": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 316,
+        "y": 409,
+        "w": 25,
+        "h": 11
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.spring": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 188,
+        "y": 436,
+        "w": 32,
+        "h": 11
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.summer": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 220,
+        "y": 436,
+        "w": 32,
+        "h": 12
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.fall": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 187,
+        "y": 447,
+        "w": 30,
+        "h": 12
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.winter": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 219,
+        "y": 447,
+        "w": 34,
+        "h": 12
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.clock": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 224,
+        "y": 464,
+        "w": 43,
+        "h": 43
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.lock": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 320,
+        "y": 497,
+        "w": 16,
+        "h": 15
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.!": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 381,
+        "y": 491,
+        "w": 14,
+        "h": 17
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.+": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 391,
+        "y": 359,
+        "w": 11,
+        "h": 14
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.todoBoard": {
+      "asset": "LooseSprites/SpecialOrdersBoard",
+      "rect": {
+        "x": 0,
+        "y": 4,
+        "w": 335,
+        "h": 193
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.eventBoard": {
+      "asset": "LooseSprites/textBox",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 200,
+        "h": 50
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
     }
   }
 }
