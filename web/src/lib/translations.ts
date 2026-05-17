@@ -171,13 +171,14 @@ const FALLBACK_CHARACTERS: Record<string, string> = {
   Morgan: "摩根",
   Martin: "马丁",
   Wendy: "温蒂",
-  GuntherSilvian: "甘瑟·席尔维安",
-  MarlonFay: "马龙·菲伊",
-  MorrisTod: "莫里斯·托德",
-  SVE_Henchman: "帮手 (SVE)",
+  GuntherSilvian: "甘瑟",
+  MarlonFay: "马龙",
+  MorrisTod: "莫里斯",
+  SVE_Henchman: "帮手",
   Henchman: "帮手",
   Lance_Sword: "兰斯（剑）",
   Regla: "瑞格拉",
+  Sariel: "白井"
 };
 
 const FALLBACK_WEATHER: Record<string, string> = {

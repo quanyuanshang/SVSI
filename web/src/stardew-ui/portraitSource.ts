@@ -15,6 +15,9 @@ const VANILLA_PORTRAIT_PREFIX = "/generated/stardew-ui/Portraits/";
 const PORTRAIT_ASSET_ALIASES: Record<string, string> = {
   Leo: "ParrotBoy",
   LeoMainland: "ParrotBoy",
+  /** SVE portrait sheet ids differ from in-game NPC ids. */
+  Marlon: "MarlonFay",
+  Gunther: "GuntherSilvian",
 };
 
 export function resolvePortraitAssetName(characterName: string): string {
@@ -37,7 +40,7 @@ export function resolvePortraitSource(
   }
 
   const assetName = resolvePortraitAssetName(name);
-  const baseUrl = resolveBasePortraitUrl(assetName, manifest, name);
+  const baseUrl = resolveBasePortraitUrl(assetName, manifest);
   const activeSet =
     manifest?.portraiture?.presets?.[name] ??
     manifest?.portraiture?.presets?.[assetName] ??
@@ -68,13 +71,9 @@ export function resolvePortraitSource(
   };
 }
 
-function resolveBasePortraitUrl(
-  assetName: string,
-  manifest: StardewManifest | null,
-  displayName?: string,
-): string {
+function resolveBasePortraitUrl(assetName: string, manifest: StardewManifest | null): string {
   const portraits = manifest?.portraits;
-  for (const key of portraitLookupKeys(assetName, null, displayName)) {
+  for (const key of portraitLookupKeys(assetName)) {
     const url = portraits?.[key];
     if (url && isVanillaPortraitUrl(url)) {
       return url;

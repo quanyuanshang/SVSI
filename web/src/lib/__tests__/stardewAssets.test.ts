@@ -157,6 +157,25 @@ describe("stardewAssets", () => {
     });
   });
 
+  it("resolves Marlon to the SVE MarlonFay sheet instead of the vanilla single-frame Marlon", () => {
+    const merged = mergeStardewManifests(manifest, {
+      version: 1,
+      portraits: {
+        Marlon: "/generated/stardew-ui/Portraits/Marlon.png",
+      },
+      portraitSources: {
+        "FlashShifter.StardewValleyExpandedCP/MarlonFay":
+          "/generated/stardew-ui/Portraits/FlashShifter.StardewValleyExpandedCP/MarlonFay.png",
+      },
+    });
+
+    expect(resolvePortraitSource("Marlon", merged)).toMatchObject({
+      characterName: "Marlon",
+      hdUrl: "/generated/stardew-ui/Portraits/FlashShifter.StardewValleyExpandedCP/MarlonFay.png",
+    });
+    expect(resolvePortraitSource("Marlon", merged)?.baseUrl).not.toContain("/Marlon.png");
+  });
+
   it("maps Leo to the vanilla ParrotBoy portrait sheet", () => {
     const withParrotBoy = mergeStardewManifests(manifest, {
       version: 1,

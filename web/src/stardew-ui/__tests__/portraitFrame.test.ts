@@ -67,6 +67,31 @@ describe("portraitFrame", () => {
     });
   });
 
+  it("uses Portraiture 2-column grid when the CP base row count does not match HD height (SDS Sariel)", () => {
+    const grid = derivePortraitGrid(
+      { width: 512, height: 3072 },
+      { width: 512, height: 2048 },
+    );
+    expect(grid).toMatchObject({
+      baseColumns: 2,
+      baseRows: 8,
+      frameWidth: 256,
+      frameHeight: 256,
+      source: "fallback",
+    });
+  });
+
+  it("infers a multi-frame grid when the vanilla base is only a single 64px tile", () => {
+    const grid = derivePortraitGrid({ width: 64, height: 64 }, { width: 128, height: 192 });
+    expect(grid).toMatchObject({
+      baseColumns: 2,
+      baseRows: 3,
+      frameWidth: 64,
+      frameHeight: 64,
+      source: "fallback",
+    });
+  });
+
   it("ignores a replaced HD base sheet with the same dimensions as the HD sheet", () => {
     const grid = derivePortraitGrid(
       { width: 512, height: 4096 },

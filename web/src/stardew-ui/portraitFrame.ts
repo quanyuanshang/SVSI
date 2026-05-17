@@ -74,19 +74,26 @@ export function derivePortraitGrid(
     });
   }
 
-  if (baseSize?.width && baseSize.height && !isLikelyHdReplacementBase(baseSize, hdSize)) {
+  if (
+    baseSize?.width &&
+    baseSize.height &&
+    !isLikelyHdReplacementBase(baseSize, hdSize) &&
+    !shouldInferGridFromHdOnly(baseSize, hdSize)
+  ) {
     const { baseColumns, baseRows } = deriveBaseGrid(baseSize);
-    return finalizeGrid({
-      baseColumns,
-      baseRows,
-      frameWidth: hdSize.width / baseColumns,
-      frameHeight: hdSize.height / baseRows,
-      baseSheetWidth: baseSize.width,
-      baseSheetHeight: baseSize.height,
-      hdSheetWidth: hdSize.width,
-      hdSheetHeight: hdSize.height,
-      source: "derived",
-    });
+    if (isDerivedGridAligned(hdSize, baseColumns, baseRows)) {
+      return finalizeGrid({
+        baseColumns,
+        baseRows,
+        frameWidth: hdSize.width / baseColumns,
+        frameHeight: hdSize.height / baseRows,
+        baseSheetWidth: baseSize.width,
+        baseSheetHeight: baseSize.height,
+        hdSheetWidth: hdSize.width,
+        hdSheetHeight: hdSize.height,
+        source: "derived",
+      });
+    }
   }
 
   return inferPortraitGridFromHdSheet(hdSize);
@@ -142,6 +149,33 @@ function inferPortraitGridFromHdSheet(hdSize: AtlasSize): PortraitGrid {
       warning: "Could not infer a portrait grid; showing the top-left frame only.",
     })
   );
+}
+
+function isDerivedGridAligned(
+  hdSize: AtlasSize,
+  baseColumns: number,
+  baseRows: number,
+): boolean {
+  const frameWidth = hdSize.width / baseColumns;
+  const frameHeight = hdSize.height / baseRows;
+
+  return (
+    isInteger(frameWidth) &&
+    isInteger(frameHeight) &&
+    frameWidth >= 16 &&
+    frameHeight >= 16
+  );
+}
+
+/** Vanilla extract is often a single 64×64 face while the mod HD sheet is a full grid. */
+function shouldInferGridFromHdOnly(baseSize: AtlasSize, hdSize: AtlasSize): boolean {
+  const baseColumns = Math.max(1, Math.floor(baseSize.width / VANILLA_PORTRAIT_FRAME));
+  const baseRows = Math.max(1, Math.floor(baseSize.height / VANILLA_PORTRAIT_FRAME));
+  const isSingleFrameBase = baseColumns === 1 && baseRows === 1;
+  const hdIsLarger =
+    hdSize.width > baseSize.width + 1 || hdSize.height > baseSize.height + 1;
+
+  return isSingleFrameBase && hdIsLarger;
 }
 
 function isLikelyHdReplacementBase(baseSize: AtlasSize, hdSize: AtlasSize): boolean {
