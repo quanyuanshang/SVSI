@@ -13,6 +13,7 @@ import type { StoryEventNode } from "../lib/storyGraph";
 interface EventNodeCardProps {
   node: StoryEventNode;
   tone?: EventNodeCardTone;
+  density?: "default" | "compact";
   selected?: boolean;
   showStatusText?: boolean;
   onSelectNode: (node: StoryEventNode) => void;
@@ -32,6 +33,7 @@ type EventNodeCardTone =
 export function EventNodeCard({
   node,
   tone = "neutral",
+  density = "default",
   selected = false,
   showStatusText = false,
   onSelectNode,
@@ -43,7 +45,7 @@ export function EventNodeCard({
 
   return (
     <button
-      className={`event-node-card event-node-card--${tone}${selected ? " event-node-card--selected" : ""}`}
+      className={`event-node-card event-node-card--${tone} event-node-card--${density}${selected ? " event-node-card--selected" : ""}`}
       onClick={() => onSelectNode(node)}
       style={eventBoardStyle}
       title={hint}
@@ -63,7 +65,9 @@ export function EventNodeCard({
       />
       <span className="event-node-card__content">
         <span className="event-node-card__title">{node.displayName}</span>
-        <span className="event-node-card__meta event-node-card__id">ID: {node.eventId ?? "未知"}</span>
+        {density === "compact" ? null : (
+          <span className="event-node-card__meta event-node-card__id">ID: {node.eventId ?? "未知"}</span>
+        )}
         <span className="event-node-card__meta">来源: {node.modName ?? "未知 Mod"}</span>
         <span className="event-node-card__meta">地点: {formatLocationZh(node.location, node.source.sourceModId)}</span>
         <CharacterPortraitStack

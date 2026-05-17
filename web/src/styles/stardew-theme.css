@@ -362,6 +362,14 @@ textarea,
   border-radius: 8px;
 }
 
+.event-node-card--compact {
+  align-self: start;
+  justify-self: stretch;
+  height: auto;
+  min-height: 180px;
+  max-height: 260px;
+}
+
 .portrait {
   display: inline-flex;
   align-items: center;
@@ -578,23 +586,49 @@ textarea,
 }
 
 .event-chain {
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  position: relative;
+  grid-template-columns: repeat(4, minmax(260px, 1fr));
+  align-items: start;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 0 18px 18px 0;
 }
 
 .chain-lane {
-  min-width: 0;
-  overflow: hidden;
+  position: relative;
+  z-index: 1;
+  min-width: 260px;
+  overflow: visible;
 }
 
 .chain-lane__nodes {
   min-width: 0;
+  display: grid;
+  gap: 12px;
+  align-items: start;
+}
+
+.chain-lane:not(:last-child)::after {
+  z-index: 30;
+  pointer-events: none;
+}
+
+.chain-lane .event-node-card {
+  position: relative;
+  z-index: 2;
 }
 
 .chain-lane .event-node-card {
   grid-template-columns: 52px minmax(0, 1fr);
   gap: 10px;
-  min-height: 116px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+  min-height: 180px;
+  max-height: 260px;
   padding: 12px;
+  align-self: start;
 }
 
 .chain-lane .event-node-card>.portrait--lg {
@@ -607,6 +641,8 @@ textarea,
   gap: 2px;
   padding-right: 24px;
   font-size: 0.82rem;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .chain-lane .event-node-card__sprite-corner {
@@ -614,6 +650,33 @@ textarea,
   right: 8px;
   width: 32px;
   height: 32px;
+}
+
+.chain-lane .event-node-card--compact .event-node-card__title {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.22;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.chain-lane .event-node-card--compact .event-node-card__meta {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.25;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.chain-lane .event-node-card--compact .event-node-card__hint {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chain-lane .event-node-card--compact .event-node-card__status {
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .storyline-column__nodes .empty-state {

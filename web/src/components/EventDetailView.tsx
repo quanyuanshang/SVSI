@@ -70,6 +70,7 @@ export function EventDetailView({
           <section className="chain-lane chain-lane--focus">
             <h3>{node.isBlocked ? "当前事件（被阻止）" : "当前事件"}</h3>
             <EventNodeCard
+              density="compact"
               node={node}
               onSelectNode={onSelectNode}
               showStatusText
@@ -180,6 +181,7 @@ function ChainLane({
         <div className="chain-lane__nodes">
           {nodes.map((item) => (
             <EventNodeCard
+              density="compact"
               key={`${title}-${item.key}`}
               node={item}
               onSelectNode={onSelectNode}
