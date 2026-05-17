@@ -343,6 +343,45 @@
       "source": "manual:/stardew-assets-debug",
       "confidence": "medium",
       "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.mouse": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 0,
+        "y": 0,
+        "w": 9,
+        "h": 11
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.?": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 240,
+        "y": 192,
+        "w": 21,
+        "h": 17
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
+    },
+    "icon.chatbubblle": {
+      "asset": "LooseSprites/Cursors",
+      "rect": {
+        "x": 108,
+        "y": 1868,
+        "w": 59,
+        "h": 52
+      },
+      "type": "icon",
+      "source": "manual:/stardew-assets-debug",
+      "confidence": "medium",
+      "notes": "Default shop ScrollDownSourceRect."
     }
   }
 }

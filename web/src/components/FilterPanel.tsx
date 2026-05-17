@@ -1,6 +1,6 @@
 import { CharacterPortrait } from "./CharacterPortrait";
+import { PagePanel } from "./PagePanel";
 import { StardewButton } from "./StardewButton";
-import { StardewNineSlicePanel } from "./StardewNineSlicePanel";
 import { formatStatusLabel } from "../lib/format";
 import { formatNpcFilterLabel, translateLocation } from "../lib/translations";
 import type {
@@ -64,13 +64,15 @@ export function FilterPanel({
   );
 
   return (
-    <StardewNineSlicePanel as="aside" className="panel filter-panel" variant="board">
+    <PagePanel variant="sidebar">
+      <div className="filter-panel">
       <div className="brand-card">
-        <div className="brand-chicken" aria-hidden="true">SV</div>
-        <div>
-          <h1>Stardew</h1>
-          <p>Story Inspector</p>
-        </div>
+        <img
+          alt="Stardew"
+          className="brand-card__logo"
+          src="/generated/stardew-ui/LooseSprites/logo.png"
+        />
+        <p>Story Inspector</p>
       </div>
 
       <div className="summary-stat">
@@ -153,10 +155,11 @@ export function FilterPanel({
         <span>隐藏已触发事件</span>
       </label>
 
-      <StardewButton className="clear-filter-button" onClick={onClearFilters} tone="quiet" type="button">
-        清空筛选
-      </StardewButton>
-    </StardewNineSlicePanel>
+        <StardewButton className="clear-filter-button" onClick={onClearFilters} tone="quiet" type="button">
+          清空筛选
+        </StardewButton>
+      </div>
+    </PagePanel>
   );
 }
 

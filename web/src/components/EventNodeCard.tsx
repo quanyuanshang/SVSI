@@ -1,3 +1,4 @@
+import type { CSSProperties } from "react";
 import { CharacterPortrait, CharacterPortraitStack } from "./CharacterPortrait";
 import { StardewBadge } from "./StardewBadge";
 import { StardewSpriteIcon } from "./StardewSpriteIcon";
@@ -5,16 +6,28 @@ import {
   formatLocationZh,
   formatTimeRangeZh,
 } from "../lib/format";
+import { useStardewAssetResolver } from "../lib/stardewAssets";
 import { translateCharacter } from "../lib/translations";
 import type { StoryEventNode } from "../lib/storyGraph";
 
 interface EventNodeCardProps {
   node: StoryEventNode;
-  tone?: "ready" | "later" | "locked" | "recent" | "next" | "neutral";
+  tone?: EventNodeCardTone;
   selected?: boolean;
   showStatusText?: boolean;
   onSelectNode: (node: StoryEventNode) => void;
 }
+
+type EventNodeCardTone =
+  | "ready"
+  | "current"
+  | "later"
+  | "locked"
+  | "unknown"
+  | "triggered"
+  | "recent"
+  | "next"
+  | "neutral";
 
 export function EventNodeCard({
   node,
@@ -26,11 +39,13 @@ export function EventNodeCard({
   const mainCharacter = node.characters[0];
   const hint = buildSummaryHint(node);
   const spriteKey = statusSpriteKey(node, tone);
+  const eventBoardStyle = useEventBoardBackgroundStyle();
 
   return (
     <button
       className={`event-node-card event-node-card--${tone}${selected ? " event-node-card--selected" : ""}`}
       onClick={() => onSelectNode(node)}
+      style={eventBoardStyle}
       title={hint}
       type="button"
     >
@@ -48,9 +63,9 @@ export function EventNodeCard({
       />
       <span className="event-node-card__content">
         <span className="event-node-card__title">{node.displayName}</span>
-        <span className="event-node-card__id">ID: {node.eventId ?? "未知"}</span>
-        <span>来源: {node.modName ?? "未知 Mod"}</span>
-        <span>地点: {formatLocationZh(node.location, node.source.sourceModId)}</span>
+        <span className="event-node-card__meta event-node-card__id">ID: {node.eventId ?? "未知"}</span>
+        <span className="event-node-card__meta">来源: {node.modName ?? "未知 Mod"}</span>
+        <span className="event-node-card__meta">地点: {formatLocationZh(node.location, node.source.sourceModId)}</span>
         <CharacterPortraitStack
           names={node.characters}
           sourceModId={node.source.sourceModId}
@@ -71,7 +86,7 @@ export function EventNodeCard({
           className="event-node-card__status"
           fallbackIcon={statusFallback(node, tone)}
           iconKey={spriteKey}
-          tone={node.isBlocked ? "locked" : "ready"}
+          tone={badgeTone(node, tone)}
         >
           {statusLabel(node)}
         </StardewBadge>
@@ -80,12 +95,33 @@ export function EventNodeCard({
   );
 }
 
+function useEventBoardBackgroundStyle(): CSSProperties | undefined {
+  const resolver = useStardewAssetResolver();
+  const sprite =
+    resolver.getSprite("icon.eventBoard") ??
+    resolver.getSprite("icon.eventboard") ??
+    resolver.getSprite("ui.eventboard") ??
+    resolver.getSprite("ui.board.eventboard");
+
+  if (!sprite?.atlasUrl) {
+    return undefined;
+  }
+
+  return {
+    "--event-node-card-board-image": `url("${sprite.atlasUrl}")`,
+  } as CSSProperties;
+}
+
 function statusSpriteKey(
   node: StoryEventNode,
-  tone: "ready" | "later" | "locked" | "recent" | "next" | "neutral",
+  tone: EventNodeCardTone,
 ): string {
   if (node.isBlocked || tone === "locked" || node.status === "Locked") {
     return "ui.scrollBar.back";
+  }
+
+  if (tone === "unknown" || node.status === "Unknown") {
+    return "icon.warning";
   }
 
   if (tone === "later" || node.status === "AvailableLater") {
@@ -96,23 +132,27 @@ function statusSpriteKey(
     return "ui.scrollBar.front";
   }
 
-  if (tone === "recent" || node.status === "Triggered") {
+  if (tone === "triggered" || tone === "recent" || node.status === "Triggered") {
     return "ui.shop.itemRowBackground";
   }
 
-  if (tone === "ready" || node.status === "Current") {
+  if (tone === "ready" || tone === "current" || node.status === "Current") {
     return "ui.shop.itemIconBackground";
   }
 
-  return "ui.windowBorder.default";
+  return "icon.eventBoard";
 }
 
 function statusFallback(
   node: StoryEventNode,
-  tone: "ready" | "later" | "locked" | "recent" | "next" | "neutral",
+  tone: EventNodeCardTone,
 ): string {
   if (node.isBlocked || tone === "locked" || node.status === "Locked") {
     return "!";
+  }
+
+  if (tone === "unknown" || node.status === "Unknown") {
+    return "?";
   }
 
   if (tone === "later" || node.status === "AvailableLater") {
@@ -123,11 +163,30 @@ function statusFallback(
     return "|";
   }
 
-  if (tone === "recent" || node.status === "Triggered") {
+  if (tone === "triggered" || tone === "recent" || node.status === "Triggered") {
     return "=";
   }
 
   return "*";
+}
+
+function badgeTone(
+  node: StoryEventNode,
+  tone: EventNodeCardTone,
+): "ready" | "later" | "locked" | "neutral" {
+  if (node.isBlocked || tone === "locked" || node.status === "Locked") {
+    return "locked";
+  }
+
+  if (tone === "later" || node.status === "AvailableLater") {
+    return "later";
+  }
+
+  if (tone === "unknown" || node.status === "Unknown") {
+    return "neutral";
+  }
+
+  return "ready";
 }
 
 export function buildSummaryHint(node: StoryEventNode): string {
@@ -138,6 +197,11 @@ export function buildSummaryHint(node: StoryEventNode): string {
   const missing = node.unmetConditions[0];
   if (missing) {
     return missing;
+  }
+
+  const unresolved = node.unresolvedConditions[0];
+  if (unresolved) {
+    return `未知条件：${unresolved}`;
   }
 
   if (node.timeWindow) {

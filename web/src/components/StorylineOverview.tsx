@@ -1,6 +1,7 @@
 import { CharacterPortrait } from "./CharacterPortrait";
 import { EventNodeCard } from "./EventNodeCard";
-import { StardewNineSlicePanel } from "./StardewNineSlicePanel";
+import { PagePanel } from "./PagePanel";
+import { StardewButton } from "./StardewButton";
 import { StardewSpriteIcon } from "./StardewSpriteIcon";
 import {
   buildStorylineSections,
@@ -13,6 +14,7 @@ interface StorylineOverviewProps {
   graph: StoryGraph;
   scopedNodes: StoryEventNode[];
   characterName: string;
+  onBack: () => void;
   onSelectNode: (node: StoryEventNode) => void;
 }
 
@@ -20,56 +22,82 @@ export function StorylineOverview({
   graph,
   scopedNodes,
   characterName,
+  onBack,
   onSelectNode,
 }: StorylineOverviewProps) {
   const sections = buildCharacterSections(graph, scopedNodes);
   const character = translateCharacter(characterName).zh;
 
   return (
-    <StardewNineSlicePanel as="section" className="panel storyline-overview" variant="board">
-      <div className="character-hero">
-        <CharacterPortrait name={characterName} size="lg" />
-        <div>
-          <p className="eyebrow">Character Storyline</p>
-          <h2>{character}</h2>
-          <p>故事线总览 · 查看相关事件的推进路径与前置依赖，帮助你规划下一步行动。</p>
+    <PagePanel variant="main">
+      <section className="storyline-overview">
+        <div className="character-hero-row">
+          <div className="character-hero">
+            <span className="character-hero-portraitFrame" aria-hidden="true">
+              <StardewSpriteIcon
+                className="character-hero-portraitFrame__sprite"
+                fallback=""
+                size={112}
+                spriteKey="ui.shop.portraitBackground"
+              />
+              <CharacterPortrait
+                displaySize={88}
+                name={characterName}
+                shape="square"
+                size="lg"
+              />
+            </span>
+            <div>
+              <p className="eyebrow">Character Storyline</p>
+              <h2>{character}</h2>
+              <p>故事线总览 · 查看相关事件的推进路径与前置依赖，帮助你规划下一步行动。</p>
+            </div>
+          </div>
+          <StardewButton
+            className="journal-back-button storyline-back-button"
+            onClick={onBack}
+            tone="quiet"
+            type="button"
+          >
+            返回今日任务板
+          </StardewButton>
         </div>
-      </div>
 
-      <div className="board-legend">
-        <StorylineLegend tone="recent" text="绿色 = 最近触发" />
-        <StorylineLegend tone="later" text="黄色 = 现在可推进" />
-        <StorylineLegend tone="next" text="蓝色 = 下一步候选" />
-        <StorylineLegend tone="locked" text="红色 = 前置未满足" />
-      </div>
+        <div className="board-legend">
+          <StorylineLegend tone="recent" text="绿色 = 最近触发" />
+          <StorylineLegend tone="later" text="黄色 = 现在可推进" />
+          <StorylineLegend tone="next" text="蓝色 = 下一步候选" />
+          <StorylineLegend tone="locked" text="红色 = 前置未满足" />
+        </div>
 
-      <div className="storyline-path">
-        <StorylineColumn
-          title="最近触发"
-          tone="recent"
-          nodes={sections.recent}
-          onSelectNode={onSelectNode}
-        />
-        <StorylineColumn
-          title="现在可推进"
-          tone="later"
-          nodes={sections.current}
-          onSelectNode={onSelectNode}
-        />
-        <StorylineColumn
-          title="下一步候选"
-          tone="next"
-          nodes={sections.next}
-          onSelectNode={onSelectNode}
-        />
-        <StorylineColumn
-          title="前置未满足"
-          tone="locked"
-          nodes={sections.locked}
-          onSelectNode={onSelectNode}
-        />
-      </div>
-    </StardewNineSlicePanel>
+        <div className="storyline-path">
+          <StorylineColumn
+            title="最近触发"
+            tone="recent"
+            nodes={sections.recent}
+            onSelectNode={onSelectNode}
+          />
+          <StorylineColumn
+            title="现在可推进"
+            tone="later"
+            nodes={sections.current}
+            onSelectNode={onSelectNode}
+          />
+          <StorylineColumn
+            title="下一步候选"
+            tone="next"
+            nodes={sections.next}
+            onSelectNode={onSelectNode}
+          />
+          <StorylineColumn
+            title="前置未满足"
+            tone="locked"
+            nodes={sections.locked}
+            onSelectNode={onSelectNode}
+          />
+        </div>
+      </section>
+    </PagePanel>
   );
 }
 

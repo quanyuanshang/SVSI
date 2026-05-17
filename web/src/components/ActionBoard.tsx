@@ -1,5 +1,6 @@
 import { EventNodeCard } from "./EventNodeCard";
-import { StardewNineSlicePanel } from "./StardewNineSlicePanel";
+import { PagePanel } from "./PagePanel";
+import { StorySectionPanel, type StorySectionTone } from "./StorySectionPanel";
 import { StardewSpriteIcon } from "./StardewSpriteIcon";
 import {
   buildTodayActionGroups,
@@ -17,8 +18,9 @@ interface ActionBoardProps {
 }
 
 const BOARD_GROUPS: Array<{
-  key: keyof Pick<TodayActionGroups, "ready" | "later" | "locked">;
-  tone: "ready" | "later" | "locked";
+  key: keyof Pick<TodayActionGroups, "ready" | "later" | "locked" | "incomplete">;
+  tone: StorySectionTone;
+  cardTone: "ready" | "later" | "locked" | "unknown";
   title: string;
   legend: string;
   iconKey: string;
@@ -26,7 +28,8 @@ const BOARD_GROUPS: Array<{
 }> = [
   {
     key: "ready",
-    tone: "ready",
+    tone: "current",
+    cardTone: "ready",
     title: "现在可触发",
     legend: "绿色 = 现在就能推进",
     iconKey: "ui.shop.itemIconBackground",
@@ -35,6 +38,7 @@ const BOARD_GROUPS: Array<{
   {
     key: "later",
     tone: "later",
+    cardTone: "later",
     title: "稍后可触发",
     legend: "黄色 = 换时间 / 地点 / 天气再来",
     iconKey: "icon.scrollDown",
@@ -43,10 +47,20 @@ const BOARD_GROUPS: Array<{
   {
     key: "locked",
     tone: "locked",
+    cardTone: "locked",
     title: "前置未满足",
     legend: "红色 = 先补前置剧情或条件",
     iconKey: "ui.scrollBar.back",
     fallbackIcon: "!",
+  },
+  {
+    key: "incomplete",
+    tone: "unknown",
+    cardTone: "unknown",
+    title: "条件未知",
+    legend: "灰蓝色 = 条件无法静态判断",
+    iconKey: "icon.warning",
+    fallbackIcon: "?",
   },
 ];
 
@@ -59,7 +73,8 @@ export function ActionBoard({
   const groups = buildTodayActionGroups(nodes);
 
   return (
-    <StardewNineSlicePanel as="section" className="panel action-board" variant="board">
+    <PagePanel variant="main">
+      <section className="action-board">
       <div className="journal-title">
         <p className="eyebrow">Today Action Board</p>
         <h2>今日行动板</h2>
@@ -89,10 +104,12 @@ export function ActionBoard({
             iconKey={group.iconKey}
             title={group.title}
             tone={group.tone}
+            cardTone={group.cardTone}
           />
         ))}
       </div>
-    </StardewNineSlicePanel>
+      </section>
+    </PagePanel>
   );
 }
 
@@ -103,23 +120,24 @@ function ActionBoardSection({
   fallbackIcon,
   nodes,
   onSelectNode,
+  cardTone,
 }: {
   title: string;
-  tone: "ready" | "later" | "locked";
+  tone: StorySectionTone;
+  cardTone: "ready" | "later" | "locked" | "unknown";
   iconKey: string;
   fallbackIcon: string;
   nodes: StoryEventNode[];
   onSelectNode: (node: StoryEventNode) => void;
 }) {
   return (
-    <section className={`action-board-section action-board-section--${tone}`}>
-      <div className="action-board-section__header">
-        <h3>
-          <StardewSpriteIcon fallback={fallbackIcon} size={22} spriteKey={iconKey} />
-          {title}
-        </h3>
-        <span>{nodes.length}</span>
-      </div>
+    <StorySectionPanel
+      count={nodes.length}
+      fallbackIcon={fallbackIcon}
+      iconKey={iconKey}
+      title={title}
+      tone={tone}
+    >
       {nodes.length === 0 ? (
         <p className="empty-state">这一组暂时没有事件。</p>
       ) : (
@@ -129,7 +147,7 @@ function ActionBoardSection({
               key={`${tone}-${node.key}`}
               node={node}
               onSelectNode={onSelectNode}
-              tone={tone}
+              tone={cardTone}
             />
           ))}
           {nodes.length > 8 ? (
@@ -137,6 +155,6 @@ function ActionBoardSection({
           ) : null}
         </div>
       )}
-    </section>
+    </StorySectionPanel>
   );
 }

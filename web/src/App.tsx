@@ -18,6 +18,7 @@ import {
 } from "./lib/storyGraph";
 import { useStoryState } from "./hooks/useStoryState";
 import "./styles.css";
+import "./styles/stardew-theme.css";
 
 export default function App() {
   if (window.location.pathname.startsWith("/stardew-assets-debug")) {
@@ -141,6 +142,7 @@ function InspectorApp() {
             graph={storyGraph}
             scopedNodes={filteredStoryNodes}
             characterName={selectedCharacter}
+            onBack={() => toggleNpcName(selectedCharacter)}
             onSelectNode={handleSelectStoryNode}
           />
         ) : (

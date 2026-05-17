@@ -13,6 +13,8 @@ interface CharacterPortraitProps {
   label?: string;
   /** Stardew portrait sheet expression index; default 0 (neutral). */
   expressionIndex?: number;
+  shape?: "circle" | "square";
+  displaySize?: number;
 }
 
 export function CharacterPortrait({
@@ -21,6 +23,8 @@ export function CharacterPortrait({
   size = "md",
   label,
   expressionIndex = 0,
+  shape = "circle",
+  displaySize: displaySizeOverride,
 }: CharacterPortraitProps) {
   const resolver = useStardewAssetResolver();
   const displayName = label ?? (name ? translateCharacter(name, sourceModId).zh : "Farmer");
@@ -33,7 +37,7 @@ export function CharacterPortrait({
   const [candidateIndex, setCandidateIndex] = useState(0);
   const [imageFailed, setImageFailed] = useState(false);
   const hdSheetUrl = !imageFailed ? candidates[candidateIndex] : undefined;
-  const displaySize = getPortraitDisplaySize(size);
+  const displaySize = displaySizeOverride ?? getPortraitDisplaySize(size);
 
   useEffect(() => {
     setCandidateIndex(0);
@@ -43,7 +47,7 @@ export function CharacterPortrait({
   return (
     <span
       aria-label={displayName}
-      className={`portrait portrait--${size}${hdSheetUrl ? " portrait--image" : ""}`}
+      className={`portrait portrait--${size} portrait--${shape}${hdSheetUrl ? " portrait--image" : ""}`}
       title={name ?? displayName}
     >
       {hdSheetUrl ? (
